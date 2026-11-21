@@ -1,0 +1,39 @@
+# VCS / IDE metadata — never needed in a build context
+.git
+.gitignore
+.gitattributes
+.github
+.idea
+.vs
+.vscode
+
+# Build outputs and artifacts
+.artifacts
+artifacts
+release
+**/bin
+**/obj
+**/TestResults
+*.binlog
+*.user
+
+# Secrets — must never enter a build context or an image
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Not needed to compile the MCP server inside the image:
+# - eng/ holds CI/release PowerShell scripts; root Directory.Build.props/.targets
+#   do not import anything from it (verified), so excluding it is safe.
+eng
+# - tests/ are not referenced by mcp/Freenaute.Freebox.Mcp.csproj; the container
+#   build restores/publishes the server project only, so tests are excluded to
+#   keep the context small (the .slnx is NOT restored inside the image).
+tests
+# - containers/ itself, to avoid recursion when building from the repo root
+#   (docker build -f containers/Dockerfile .)
+containers

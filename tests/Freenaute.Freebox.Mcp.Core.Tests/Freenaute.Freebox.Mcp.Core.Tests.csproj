@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1707;CA2201;CS1591;IDE0005;IDE0008;IL2026;IL2057;IL2062;IL2065;IL2070;IL2072;IL2075;IL2077;IL2109;IL3050</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    The host's Security sources are recompiled here (InternalsVisibleTo) so internals stay testable.
+    Each file is included only when it exists: the host-side storage refactor removes
+    MacOsCredentialStorage/CredentialStorageSelection and adds LinuxSecretServiceCredentialStorage/
+    EncryptedFileCredentialStorage. The matching HAS_* defines enable the tests that target them.
+  -->
+  <PropertyGroup>
+    <_SecurityDir>$(MSBuildProjectDirectory)\..\..\mcp\Freenaute.Freebox.Mcp\Security\</_SecurityDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('$(_SecurityDir)MacOsCredentialStorage.cs')">
+    <HasMacOsCredentialStorage>true</HasMacOsCredentialStorage>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('$(_SecurityDir)LinuxSecretServiceCredentialStorage.cs')">
+    <HasLinuxSecretServiceStorage>true</HasLinuxSecretServiceStorage>
+    <DefineConstants>$(DefineConstants);HAS_LINUX_SECRET_SERVICE_STORAGE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="Exists('$(_SecurityDir)EncryptedFileCredentialStorage.cs')">
+    <HasEncryptedFileStorage>true</HasEncryptedFileStorage>
+    <DefineConstants>$(DefineConstants);HAS_ENCRYPTED_FILE_CREDENTIAL_STORAGE</DefineConstants>
+  </PropertyGroup>
+  <!-- Registration is compilable in the old world (MacOs storage present) or the new world (merged registration + new backends). -->
+  <PropertyGroup Condition="Exists('$(_SecurityDir)CredentialStorageRegistration.cs') And ('$(HasMacOsCredentialStorage)' == 'true' Or '$(HasLinuxSecretServiceStorage)' == 'true')">
+    <HasCredentialStorageRegistration>true</HasCredentialStorageRegistration>
+    <DefineConstants>$(DefineConstants);HAS_CREDENTIAL_STORAGE_REGISTRATION</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Core\Freenaute.Freebox.Mcp.Core.csproj"/>
+    <Compile Include="$(_SecurityDir)CredentialPayload.cs" Link="Security\CredentialPayload.cs" Condition="Exists('$(_SecurityDir)CredentialPayload.cs')"/>
+    <Compile Include="$(_SecurityDir)CredentialPayloadJsonContext.cs" Link="Security\CredentialPayloadJsonContext.cs" Condition="Exists('$(_SecurityDir)CredentialPayloadJsonContext.cs')"/>
+    <Compile Include="$(_SecurityDir)CredentialPayloadCodec.cs" Link="Security\CredentialPayloadCodec.cs" Condition="Exists('$(_SecurityDir)CredentialPayloadCodec.cs')"/>
+    <Compile Include="$(_SecurityDir)CredentialStoreKey.cs" Link="Security\CredentialStoreKey.cs" Condition="Exists('$(_SecurityDir)CredentialStoreKey.cs')"/>
+    <Compile Include="$(_SecurityDir)PairingPolicy.cs" Link="Security\PairingPolicy.cs" Condition="Exists('$(_SecurityDir)PairingPolicy.cs')"/>
+    <Compile Include="$(_SecurityDir)UnsupportedCredentialStorage.cs" Link="Security\UnsupportedCredentialStorage.cs" Condition="Exists('$(_SecurityDir)UnsupportedCredentialStorage.cs')"/>
+    <Compile Include="$(_SecurityDir)WindowsCredentialStorage.cs" Link="Security\WindowsCredentialStorage.cs" Condition="Exists('$(_SecurityDir)WindowsCredentialStorage.cs')"/>
+    <Compile Include="$(_SecurityDir)CredentialStorageRegistration.cs" Link="Security\CredentialStorageRegistration.cs" Condition="'$(HasCredentialStorageRegistration)' == 'true'"/>
+    <Compile Include="$(_SecurityDir)LinuxSecretServiceCredentialStorage.cs" Link="Security\LinuxSecretServiceCredentialStorage.cs" Condition="'$(HasLinuxSecretServiceStorage)' == 'true'"/>
+    <Compile Include="$(_SecurityDir)EncryptedFileCredentialStorage.cs" Link="Security\EncryptedFileCredentialStorage.cs" Condition="'$(HasEncryptedFileStorage)' == 'true'"/>
+    <!-- Legacy files kept only while the host-side refactor has not removed them yet. -->
+    <Compile Include="$(_SecurityDir)MacOsCredentialStorage.cs" Link="Security\MacOsCredentialStorage.cs" Condition="'$(HasMacOsCredentialStorage)' == 'true'"/>
+    <Compile Include="$(_SecurityDir)CredentialStorageSelection.cs" Link="Security\CredentialStorageSelection.cs" Condition="Exists('$(_SecurityDir)CredentialStorageSelection.cs') And '$(HasMacOsCredentialStorage)' == 'true'"/>
+  </ItemGroup>
+</Project>

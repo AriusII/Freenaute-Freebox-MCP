@@ -1,0 +1,13 @@
+global using System.Collections.Frozen;
+global using System.Globalization;
+global using System.Reflection;
+global using System.Text;
+global using Freenaute.Freebox.Mcp.Core.Abstractions;
+global using Freenaute.Freebox.Mcp.Core.Results;
+global using Freenaute.Freebox.Mcp.Core.Security;
+global using Freenaute.Freebox.Mcp.Resources.Documentation;
+global using Freenaute.Freebox.Mcp.Resources.Live;
+global using Freenaute.Freebox.Mcp.Resources.Models;
+global using Microsoft.Extensions.DependencyInjection;
+global using ModelContextProtocol.Protocol;
+global using ModelContextProtocol.Server;

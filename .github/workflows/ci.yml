@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOLUTION: Freenaute.Freebox.MCP.slnx
+  MCP_PROJECT: mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj
+  CONFIGURATION: Release
+
+jobs:
+  build-test-validate:
+    name: Build, test, validate, AOT smoke (linux-x64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read SDK version from global.json
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
+          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Read package version from the MCP project
+        id: version
+        shell: pwsh
+        run: |
+          $proj = [xml](Get-Content $env:MCP_PROJECT)
+          $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ steps.sdk.outputs.version }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} -c ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test (xUnit v3 via Microsoft.Testing.Platform)
+        run: dotnet test ${{ env.SOLUTION }} -c ${{ env.CONFIGURATION }} --no-build
+
+      - name: Validate package metadata and container config (MSBuild targets)
+        run: dotnet msbuild -t:ValidateMetadata,ValidateContainers -p:Configuration=${{ env.CONFIGURATION }}
+
+      - name: Install Native AOT toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish smoke (linux-x64, Native AOT, single file)
+        run: |
+          dotnet publish ${{ env.MCP_PROJECT }} \
+            -c ${{ env.CONFIGURATION }} \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishAot=true \
+            -p:PublishSingleFile=true \
+            -p:InvariantGlobalization=true \
+            -o .artifacts/publish/${{ steps.version.outputs.VERSION }}/linux-x64
+
+      - name: Upload smoke artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ci-smoke-linux-x64
+          path: .artifacts/publish/${{ steps.version.outputs.VERSION }}/linux-x64/
+          retention-days: 7

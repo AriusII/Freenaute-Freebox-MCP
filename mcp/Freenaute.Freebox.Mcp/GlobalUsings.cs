@@ -1,0 +1,25 @@
+global using System.ComponentModel;
+global using System.Diagnostics;
+global using System.Runtime.CompilerServices;
+global using System.Runtime.InteropServices;
+global using System.Runtime.InteropServices.ComTypes;
+global using System.Security.Cryptography;
+global using System.Text;
+global using System.Text.Json;
+global using System.Text.Json.Serialization;
+global using Freenaute.Freebox.Client.Credentials;
+global using Freenaute.Freebox.Mcp.Core.Abstractions;
+global using Freenaute.Freebox.Mcp.Core.DependencyInjection;
+global using Freenaute.Freebox.Mcp.Security;
+global using Freenaute.Freebox.Mcp.Resources.DependencyInjection;
+global using Freenaute.Freebox.Mcp.Tools.Discovery;
+global using Freenaute.Freebox.Mcp.Tools.Network;
+global using Freenaute.Freebox.Mcp.Tools.Pairing;
+global using Freenaute.Freebox.Mcp.Tools.System;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using ModelContextProtocol.Protocol;
+global using JsonSerializerOptions = System.Text.Json.JsonSerializerOptions;
+global using ToolResultJsonSerializerContext =
+    Freenaute.Freebox.Mcp.Tools.Serialization.ToolResultJsonSerializerContext;

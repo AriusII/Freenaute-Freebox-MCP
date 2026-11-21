@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1707;CA2201;CS1591;IDE0005;IDE0008;IL2026;IL2057;IL2062;IL2065;IL2070;IL2072;IL2075;IL2077;IL2109;IL3050</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Tools\Freenaute.Freebox.Mcp.Tools.csproj"/>
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="packages.lock.json" />
+  </ItemGroup>
+</Project>

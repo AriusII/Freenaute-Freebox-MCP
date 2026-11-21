@@ -1,0 +1,423 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+paths:
+  - '.github/workflows/**'
+  - 'containers/**'
+  - 'libs/**'
+  - 'mcp/**'
+  - 'tests/**'
+  - 'Directory.Build.props'
+  - 'Directory.Build.targets'
+  - 'Directory.Packages.props'
+  - 'Freenaute.Freebox.MCP.slnx'
+  - 'NuGet.Config'
+  - 'global.json'
+
+env:
+  SOLUTION: Freenaute.Freebox.MCP.slnx
+  MCP_PROJECT: mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj
+  CONFIGURATION: Release
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  validate:
+    name: Validate (restore, build, test, metadata)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read SDK version from global.json
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
+          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ steps.sdk.outputs.version }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} -c ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Test (xUnit v3 via Microsoft.Testing.Platform)
+        run: dotnet test ${{ env.SOLUTION }} -c ${{ env.CONFIGURATION }} --no-build
+
+      - name: Validate package metadata and container config (MSBuild targets)
+        run: dotnet msbuild -t:ValidateMetadata,ValidateContainers -p:Configuration=${{ env.CONFIGURATION }}
+
+  publish-binaries:
+    name: Publish ${{ matrix.rid }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            archive-ext: zip
+          - rid: win-arm64
+            os: windows-11-arm
+            archive-ext: zip
+          - rid: linux-x64
+            os: ubuntu-latest
+            archive-ext: tar.gz
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+            archive-ext: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read SDK version from global.json
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
+          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ steps.sdk.outputs.version }}
+
+      - name: Install Native AOT toolchain (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Restore (RID-specific)
+        run: dotnet restore ${{ env.MCP_PROJECT }} -r ${{ matrix.rid }}
+
+      - name: Publish (Native AOT, self-contained, single file)
+        run: |
+          dotnet publish ${{ env.MCP_PROJECT }} \
+            -c ${{ env.CONFIGURATION }} \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            --no-restore \
+            -p:PublishAot=true \
+            -p:PublishSingleFile=true \
+            -p:InvariantGlobalization=true \
+            -p:Version=${{ steps.version.outputs.VERSION }} \
+            -o .artifacts/publish/${{ steps.version.outputs.VERSION }}/${{ matrix.rid }}
+
+      - name: Archive (tar.gz)
+        if: matrix.archive-ext == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p .artifacts/release
+          tar -czf ".artifacts/release/freenaute-freebox-mcp-${{ steps.version.outputs.VERSION }}-${{ matrix.rid }}.tar.gz" \
+            -C ".artifacts/publish/${{ steps.version.outputs.VERSION }}/${{ matrix.rid }}" .
+
+      - name: Archive (zip)
+        if: matrix.archive-ext == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .artifacts/release | Out-Null
+          Compress-Archive -Path ".artifacts/publish/${{ steps.version.outputs.VERSION }}/${{ matrix.rid }}/*" `
+            -DestinationPath ".artifacts/release/freenaute-freebox-mcp-${{ steps.version.outputs.VERSION }}-${{ matrix.rid }}.zip" -Force
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-asset-${{ matrix.rid }}
+          path: .artifacts/release/
+          retention-days: 30
+
+  pack:
+    name: Pack NuGet and push to NuGet.org (OIDC trusted publishing)
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read SDK version from global.json
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
+          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ steps.sdk.outputs.version }}
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Pack (MSBuild target -> .artifacts/package/<config>)
+        run: dotnet msbuild -t:Pack -p:Configuration=${{ env.CONFIGURATION }} -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Upload nupkg artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: nupkg
+          path: .artifacts/package/${{ env.CONFIGURATION }}/
+          retention-days: 30
+
+      - name: NuGet login (OIDC -> short-lived API key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push packages to NuGet.org
+        shell: bash
+        run: |
+          for pkg in .artifacts/package/${{ env.CONFIGURATION }}/*.nupkg .artifacts/package/${{ env.CONFIGURATION }}/*.snupkg; do
+            [ -e "$pkg" ] || continue
+            dotnet nuget push "$pkg" \
+              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+
+  containers-linux:
+    name: Container image (linux amd64/arm64)
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push multi-arch image
+        shell: bash
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -f containers/Dockerfile \
+            --build-arg VERSION=${{ steps.version.outputs.VERSION }} \
+            -t ${{ env.GHCR_IMAGE }}:${{ steps.version.outputs.VERSION }} \
+            -t ${{ env.GHCR_IMAGE }}:latest \
+            --push .
+
+  containers-windows-x64:
+    name: Container image (windows amd64)
+    needs: validate
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Windows container (amd64)
+        shell: pwsh
+        run: |
+          docker build -f containers/windows/Dockerfile `
+            --build-arg VERSION=${{ steps.version.outputs.VERSION }} `
+            --build-arg ARCH=amd64 `
+            -t ${{ env.GHCR_IMAGE }}:windows-amd64 `
+            --push .
+
+  containers-windows-arm64:
+    name: Container image (windows arm64)
+    needs: validate
+    runs-on: windows-11-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Windows container (arm64)
+        shell: pwsh
+        run: |
+          docker build -f containers/windows/Dockerfile `
+            --build-arg VERSION=${{ steps.version.outputs.VERSION }} `
+            --build-arg ARCH=arm64 `
+            -t ${{ env.GHCR_IMAGE }}:windows-arm64 `
+            --push .
+
+  release:
+    name: Assemble and publish GitHub Release
+    needs:
+      - validate
+      - publish-binaries
+      - pack
+      - containers-linux
+      - containers-windows-x64
+      - containers-windows-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve release version (tag v*, else csproj)
+        id: version
+        shell: pwsh
+        run: |
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -like 'v*') {
+            $v = $ref.Substring(1)
+          } else {
+            $proj = [xml](Get-Content $env:MCP_PROJECT)
+            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Download binary archives
+        uses: actions/download-artifact@v6
+        with:
+          pattern: release-asset-*
+          path: dist/binaries
+          merge-multiple: true
+
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v6
+        with:
+          name: nupkg
+          path: dist/nuget
+
+      - name: Generate SBOM (SPDX JSON over release assets)
+        uses: anchore/sbom-action@v0
+        with:
+          path: dist
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+          artifact-name: sbom
+          upload-artifact: false
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd dist
+          find . -type f ! -name 'SHA256SUMS.txt' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          files: |
+            dist/binaries/*
+            dist/nuget/*.nupkg
+            dist/nuget/*.snupkg
+            dist/sbom.spdx.json
+            dist/SHA256SUMS.txt
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "description": "Local stdio MCP server for read-only Freebox discovery, pairing coordination, and system/network status.",
+  "name": "org.freenaute/freenaute-freebox-mcp",
+  "version": "0.1.0-beta",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "registryBaseUrl": "https://api.nuget.org",
+      "identifier": "Freenaute.Freebox.Mcp",
+      "version": "0.1.0-beta",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": [
+        {
+          "name": "FREEBOX_APPLICATION_ID",
+          "description": "Freebox application identifier registered during pairing; defaults to org.freenaute.freebox-mcp.",
+          "isRequired": false,
+          "default": "org.freenaute.freebox-mcp"
+        },
+        {
+          "name": "FREEBOX_APPLICATION_NAME",
+          "description": "Display name presented on the Freebox during pairing.",
+          "isRequired": false,
+          "default": "Freenaute Freebox MCP"
+        },
+        {
+          "name": "FREEBOX_DEVICE_NAME",
+          "description": "Client device name presented on the Freebox during pairing; defaults to the machine name.",
+          "isRequired": false
+        },
+        {
+          "name": "FREEBOX_CREDENTIAL_PROFILE",
+          "description": "Credential profile name; defaults to 'default'.",
+          "isRequired": false,
+          "default": "default"
+        },
+        {
+          "name": "FREEBOX_ALLOW_PAIRING_INITIATION",
+          "description": "Opt-in policy switch. Pairing initiation is allowed only when set exactly to '1', 'true', or 'TRUE'.",
+          "isRequired": false,
+          "default": "false"
+        },
+        {
+          "name": "FREEBOX_SERVER_ADDRESS",
+          "description": "Freebox server base address passed to the Freebox client.",
+          "isRequired": false,
+          "default": "https://mafreebox.freebox.fr/"
+        },
+        {
+          "name": "FREEBOX_CREDENTIAL_FILE",
+          "description": "Optional path to an AES-256-GCM encrypted credential file (container/headless mode). When set, it takes priority over the OS vault and FREEBOX_CREDENTIAL_PASSPHRASE_FILE must point to the passphrase file.",
+          "isRequired": false
+        },
+        {
+          "name": "FREEBOX_CREDENTIAL_PASSPHRASE_FILE",
+          "description": "Path to the file containing the passphrase used to derive the AES-256 key for FREEBOX_CREDENTIAL_FILE.",
+          "isRequired": false
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/freenaute/Freenaute-Freebox-MCP",
+    "source": "github"
+  }
+}

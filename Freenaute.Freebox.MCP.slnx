@@ -1,0 +1,34 @@
+<Solution>
+  <Folder Name="/build/">
+    <File Path=".editorconfig"/>
+    <File Path="Directory.Build.props"/>
+    <File Path="Directory.Build.targets"/>
+    <File Path="Directory.Packages.props"/>
+    <File Path="global.json"/>
+    <File Path="NuGet.Config"/>
+  </Folder>
+  <Folder Name="/containers/">
+    <File Path="containers/Dockerfile"/>
+    <File Path="containers/windows/Dockerfile"/>
+    <File Path="containers/README.md"/>
+  </Folder>
+  <Folder Name="/libs/"/>
+  <Folder Name="/libs/Core/">
+    <Project Path="libs/Freenaute.Freebox.Mcp.Core/Freenaute.Freebox.Mcp.Core.csproj"/>
+  </Folder>
+  <Folder Name="/libs/Tools/">
+    <Project Path="libs/Freenaute.Freebox.Mcp.Tools/Freenaute.Freebox.Mcp.Tools.csproj"/>
+  </Folder>
+  <Folder Name="/libs/Resources/">
+    <Project Path="libs/Freenaute.Freebox.Mcp.Resources/Freenaute.Freebox.Mcp.Resources.csproj"/>
+  </Folder>
+  <Folder Name="/mcp/">
+    <Project Path="mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj"/>
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Freenaute.Freebox.Mcp.Core.Tests/Freenaute.Freebox.Mcp.Core.Tests.csproj"/>
+    <Project Path="tests/Freenaute.Freebox.Mcp.Resources.Tests/Freenaute.Freebox.Mcp.Resources.Tests.csproj"/>
+    <Project Path="tests/Freenaute.Freebox.Mcp.Tools.Tests/Freenaute.Freebox.Mcp.Tools.Tests.csproj"/>
+    <Project Path="tests/Freenaute.Freebox.Mcp.Protocol.Tests/Freenaute.Freebox.Mcp.Protocol.Tests.csproj"/>
+  </Folder>
+</Solution>

@@ -1,0 +1,13 @@
+global using System.ComponentModel;
+global using System.Security.Cryptography;
+global using System.Text;
+global using System.Text.Json.Serialization;
+global using Freenaute.Freebox.Mcp.Core.Abstractions;
+global using Freenaute.Freebox.Mcp.Core.Results;
+global using Freenaute.Freebox.Mcp.Tools.Security;
+global using Freenaute.Freebox.Mcp.Core.Errors;
+global using Freenaute.Freebox.Mcp.Tools.Discovery;
+global using Freenaute.Freebox.Mcp.Tools.Network;
+global using Freenaute.Freebox.Mcp.Tools.Pairing;
+global using Freenaute.Freebox.Mcp.Tools.System;
+global using ModelContextProtocol.Server;

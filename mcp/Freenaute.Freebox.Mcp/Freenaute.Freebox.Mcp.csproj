@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UsesMcpSdk>true</UsesMcpSdk>
+    <UsesHosting>true</UsesHosting>
+
+    <!-- Set up the NuGet package to be an MCP server -->
+    <PackAsTool>true</PackAsTool>
+    <PackageType>DotnetTool;McpServer</PackageType>
+    <ToolCommandName>freenaute-freebox-mcp</ToolCommandName>
+    <McpServerJsonTemplateFile>.mcp/server.json</McpServerJsonTemplateFile>
+
+    <!-- Set up the MCP server to be a self-contained application that does not rely on a shared framework -->
+    <SelfContained>true</SelfContained>
+    <PublishSelfContained>true</PublishSelfContained>
+
+    <!-- Set up the MCP server to be a single file executable -->
+    <PublishSingleFile>true</PublishSingleFile>
+
+    <!-- Configure the MCP server to be a native AOT application with invariant globalization -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Set recommended package metadata -->
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageId>Freenaute.Freebox.Mcp</PackageId>
+    <Version>0.1.0-beta</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+    <PackageTags>AI; MCP; server; stdio</PackageTags>
+    <Description>Local stdio MCP server for read-only Freebox discovery, pairing coordination, and system/network status.</Description>
+    <PackageProjectUrl>https://github.com/freenaute/Freenaute-Freebox-MCP</PackageProjectUrl>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Include additional files for browsing the MCP server. -->
+  <ItemGroup>
+    <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp/" CopyToOutputDirectory="PreserveNewest"/>
+    <None Include="README.md" Pack="true" PackagePath="/"/>
+    <None Remove="packages.lock.json"/>
+  </ItemGroup>
+
+  <!-- The generated build-info file lives under obj/ (excluded from default globs), so it is added explicitly. -->
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)Generated\BuildInfo.g.cs"/>
+  </ItemGroup>
+
+  <!-- Generate compile-time build metadata (package version + application id) before compilation. -->
+  <Target Name="GenerateBuildInfo" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <BuildInfoGeneratedDir>$(IntermediateOutputPath)Generated</BuildInfoGeneratedDir>
+      <BuildInfoGeneratedFile>$(BuildInfoGeneratedDir)\BuildInfo.g.cs</BuildInfoGeneratedFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(BuildInfoGeneratedDir)"/>
+    <ItemGroup>
+      <BuildInfoLine Include="namespace Freenaute.Freebox.Mcp%3B"/>
+      <BuildInfoLine Include="internal static class BuildInfo"/>
+      <BuildInfoLine Include="{"/>
+      <BuildInfoLine Include="    public const string Version = &quot;$(Version)&quot;%3B"/>
+      <BuildInfoLine Include="    public const string ApplicationId = &quot;org.freenaute.freebox-mcp&quot;%3B"/>
+      <BuildInfoLine Include="}"/>
+    </ItemGroup>
+    <WriteLinesToFile File="$(BuildInfoGeneratedFile)" Lines="@(BuildInfoLine)" Overwrite="true"/>
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Core\Freenaute.Freebox.Mcp.Core.csproj"/>
+    <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Tools\Freenaute.Freebox.Mcp.Tools.csproj"/>
+    <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Resources\Freenaute.Freebox.Mcp.Resources.csproj"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ContainerRepository>freenaute-freebox-mcp</ContainerRepository>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:11.0-resolute-chiseled</ContainerBaseImage>
+    <ContainerUser>1654</ContainerUser>
+    <ContainerRuntimeIdentifiers>linux-x64;linux-arm64</ContainerRuntimeIdentifiers>
+    <ContainerImageTag>$(PackageVersion)</ContainerImageTag>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ContainerLabel Include="org.opencontainers.image.source" Value="$(RepositoryUrl)"/>
+    <ContainerLabel Include="org.opencontainers.image.description" Value="$(Description)"/>
+    <ContainerLabel Include="org.opencontainers.image.licenses" Value="$(PackageLicenseExpression)"/>
+  </ItemGroup>
+
+</Project>

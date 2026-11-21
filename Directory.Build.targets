@@ -1,0 +1,289 @@
+<Project>
+  <!--
+    Root-owned build orchestration. Owner decision: no eng/ folder and no .ps1 scripts;
+    build/pack/publish/validation go through these MSBuild targets and plain `dotnet`
+    commands in CI.
+
+    None of these targets are hooked into Build, so `dotnet build` is unaffected. Invoke
+    them explicitly, either at the repo root (the .slnx forwards the target to every
+    project; the _IsMcpProject guard below makes the body run exactly once, in the context
+    of the MCP executable project) or on the MCP project directly:
+
+      dotnet msbuild -t:Validate [-p:Configuration=Release]
+      dotnet msbuild -t:ValidateMetadata
+      dotnet msbuild -t:ValidateContainers
+      dotnet msbuild -t:PublishAll            [-p:Version=...]
+      dotnet msbuild -t:Pack                  [-p:Configuration=Release]
+      dotnet msbuild -t:Archive               (after PublishAll)
+      dotnet msbuild -t:PublishContainers     [-p:Version=...]
+      dotnet msbuild mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -t:BuildMcpHost -p:Configuration=Release
+
+    Content checks use findstr (Windows) with exit codes captured via the Exec ExitCode
+    output; structured files are read with ReadLinesFromFile + regex in MSBuild.
+  -->
+
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
+    <!-- NormalizePath so findstr gets native separators on Windows (it rejects '/'). -->
+    <McpCsproj>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj'))</McpCsproj>
+    <McpServerJson>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/.mcp/server.json'))</McpServerJson>
+    <McpProgramCs>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/Program.cs'))</McpProgramCs>
+    <RootProps>$([MSBuild]::NormalizePath('$(RepoRoot)Directory.Build.props'))</RootProps>
+    <GlobalJson>$([MSBuild]::NormalizePath('$(RepoRoot)global.json'))</GlobalJson>
+    <LinuxDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/Dockerfile'))</LinuxDockerfile>
+    <WindowsDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/windows/Dockerfile'))</WindowsDockerfile>
+    <McpDir>$([MSBuild]::NormalizePath('$(RepoRoot)mcp'))</McpDir>
+    <LibsDir>$([MSBuild]::NormalizePath('$(RepoRoot)libs'))</LibsDir>
+
+    <ExpectedSdkVersion>11.0.100</ExpectedSdkVersion>
+    <ExpectedMcpRids>win-x64;win-arm64;linux-x64;linux-arm64</ExpectedMcpRids>
+
+    <PublishRoot>$(ArtifactsPath)/publish</PublishRoot>
+    <PackageRoot>$(ArtifactsPath)/package</PackageRoot>
+    <ReleaseRoot>$(ArtifactsPath)/release</ReleaseRoot>
+    <ProtocolHostRoot>$(ArtifactsPath)/protocol-host</ProtocolHostRoot>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Orchestration targets run once, in the context of the MCP executable project. -->
+    <_IsMcpProject Condition="'$(MSBuildProjectName)' == 'Freenaute.Freebox.Mcp'">true</_IsMcpProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Release perimeter. ExeName is verified after publish; ArchiveExt drives bsdtar -a. -->
+    <PublishRid Include="win-x64">
+      <ExeName>Freenaute.Freebox.Mcp.exe</ExeName>
+      <ArchiveExt>zip</ArchiveExt>
+    </PublishRid>
+    <PublishRid Include="win-arm64">
+      <ExeName>Freenaute.Freebox.Mcp.exe</ExeName>
+      <ArchiveExt>zip</ArchiveExt>
+    </PublishRid>
+    <PublishRid Include="linux-x64">
+      <ExeName>Freenaute.Freebox.Mcp</ExeName>
+      <ArchiveExt>tar.gz</ArchiveExt>
+    </PublishRid>
+    <PublishRid Include="linux-arm64">
+      <ExeName>Freenaute.Freebox.Mcp</ExeName>
+      <ArchiveExt>tar.gz</ArchiveExt>
+    </PublishRid>
+  </ItemGroup>
+
+  <!-- Aggregate validation entry point: metadata + containers. -->
+  <Target Name="Validate" DependsOnTargets="ValidateMetadata;ValidateContainers" Condition="'$(_IsMcpProject)' == 'true'"/>
+
+  <!-- Validates repo metadata: SDK pin in global.json, csproj Version == server.json version,
+       RuntimeIdentifiers perimeter, UseArtifactsOutput, no hardcoded version literal in
+       Program.cs, FREEBOX_SERVER_ADDRESS declared in server.json, and no leftover
+       io.github.freenaute application id under mcp/ or libs/. -->
+  <Target Name="ValidateMetadata" Condition="'$(_IsMcpProject)' == 'true'">
+
+    <!-- global.json must pin the SDK version. -->
+    <ReadLinesFromFile File="$(GlobalJson)">
+      <Output TaskParameter="Lines" ItemName="_GlobalJsonLines"/>
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_GlobalJson>@(_GlobalJsonLines)</_GlobalJson>
+    </PropertyGroup>
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_GlobalJson)", "\x22version\x22\s*:\s*\x22$(ExpectedSdkVersion)\x22"))'
+           Text="global.json must pin sdk.version to $(ExpectedSdkVersion)."/>
+
+    <!-- csproj <Version> must equal the version in .mcp/server.json. -->
+    <ReadLinesFromFile File="$(McpCsproj)">
+      <Output TaskParameter="Lines" ItemName="_CsprojLines"/>
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(McpServerJson)">
+      <Output TaskParameter="Lines" ItemName="_ServerJsonLines"/>
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_CsprojContent>@(_CsprojLines)</_CsprojContent>
+      <_ServerJsonContent>@(_ServerJsonLines)</_ServerJsonContent>
+    </PropertyGroup>
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_CsprojContent)", "\x3cVersion\x3e"))'
+           Text="No &lt;Version&gt; element found in $(McpCsproj)."/>
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ServerJsonContent)", "\x22version\x22\s*:"))'
+           Text='No "version" field found in $(McpServerJson).'/>
+    <PropertyGroup>
+      <_CsprojVersion>$([System.Text.RegularExpressions.Regex]::Match("$(_CsprojContent)", "\x3cVersion\x3e([^\x3c]+)\x3c/Version\x3e").Groups[1].Value)</_CsprojVersion>
+      <_ServerJsonVersion>$([System.Text.RegularExpressions.Regex]::Match("$(_ServerJsonContent)", "\x22version\x22\s*:\s*\x22([^\x22]+)\x22").Groups[1].Value)</_ServerJsonVersion>
+    </PropertyGroup>
+    <Error Condition="'$(_CsprojVersion)' != '$(_ServerJsonVersion)'"
+           Text="Version mismatch: $(McpCsproj) has '$(_CsprojVersion)' but $(McpServerJson) has '$(_ServerJsonVersion)'."/>
+
+    <!-- RuntimeIdentifiers of the MCP project must match the release perimeter exactly. -->
+    <Exec Command="findstr /C:&quot;&lt;RuntimeIdentifiers&gt;$(ExpectedMcpRids)&lt;/RuntimeIdentifiers&gt;&quot; &quot;$(McpCsproj)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_RidsExit"/>
+    </Exec>
+    <Error Condition="'$(_RidsExit)' != '0'"
+           Text="$(McpCsproj) RuntimeIdentifiers must be exactly '$(ExpectedMcpRids)'."/>
+
+    <!-- Artifacts output must stay enabled at the repo root. -->
+    <Exec Command="findstr /C:&quot;&lt;UseArtifactsOutput&gt;true&lt;/UseArtifactsOutput&gt;&quot; &quot;$(RootProps)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_ArtifactsExit"/>
+    </Exec>
+    <Error Condition="'$(_ArtifactsExit)' != '0' or '$(UseArtifactsOutput)' != 'true'"
+           Text="UseArtifactsOutput must be true in Directory.Build.props."/>
+
+    <!-- No hardcoded version literal left in Program.cs (BuildInfo is generated from $(Version)). -->
+    <Exec Command="findstr /C:&quot;$(_CsprojVersion)&quot; &quot;$(McpProgramCs)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_ProgramVersionExit"/>
+    </Exec>
+    <Error Condition="'$(_ProgramVersionExit)' == '0'"
+           Text="$(McpProgramCs) still hardcodes the version literal '$(_CsprojVersion)'; use BuildInfo.Version instead."/>
+
+    <!-- server.json must expose FREEBOX_SERVER_ADDRESS. -->
+    <Exec Command="findstr /C:&quot;FREEBOX_SERVER_ADDRESS&quot; &quot;$(McpServerJson)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_ServerAddressExit"/>
+    </Exec>
+    <Error Condition="'$(_ServerAddressExit)' != '0'"
+           Text="$(McpServerJson) must declare the FREEBOX_SERVER_ADDRESS environment variable."/>
+
+    <!-- No leftover io.github.freenaute application id under mcp/ or libs/ (recursive scan). -->
+    <Exec Command="findstr /S /I /M /C:&quot;io.github.freenaute&quot; &quot;*.cs&quot; &quot;*.csproj&quot; &quot;*.json&quot; &quot;*.md&quot;" IgnoreExitCode="true" WorkingDirectory="$(McpDir)">
+      <Output TaskParameter="ExitCode" PropertyName="_McpIdExit"/>
+    </Exec>
+    <Error Condition="'$(_McpIdExit)' == '0'"
+           Text="Leftover 'io.github.freenaute' id under mcp/ (files listed by findstr above)."/>
+    <Exec Command="findstr /S /I /M /C:&quot;io.github.freenaute&quot; &quot;*.cs&quot; &quot;*.csproj&quot; &quot;*.json&quot; &quot;*.md&quot;" IgnoreExitCode="true" WorkingDirectory="$(LibsDir)">
+      <Output TaskParameter="ExitCode" PropertyName="_LibsIdExit"/>
+    </Exec>
+    <Error Condition="'$(_LibsIdExit)' == '0'"
+           Text="Leftover 'io.github.freenaute' id under libs/ (files listed by findstr above)."/>
+
+    <Message Importance="high" Text="ValidateMetadata: OK (sdk=$(ExpectedSdkVersion), version=$(_CsprojVersion), rids=$(ExpectedMcpRids))."/>
+  </Target>
+
+  <!-- Validates the container definitions. Per-file rules are delegated to
+       _ValidateContainerFile through a child MSBuild invocation so each file gets its
+       own property scope (batched tasks would overwrite the captured findstr outputs). -->
+  <Target Name="ValidateContainers" Condition="'$(_IsMcpProject)' == 'true'">
+    <Error Condition="!Exists('$(LinuxDockerfile)')" Text="Missing $(LinuxDockerfile)."/>
+    <Error Condition="!Exists('$(WindowsDockerfile)')" Text="Missing $(WindowsDockerfile) (owned by the containers agent)."/>
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
+             Properties="ContainerFile=$(LinuxDockerfile);ContainerKind=linux;ContainerRid1=linux-x64;ContainerRid2=linux-arm64;ContainerRequireNonRootUser=true"/>
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
+             Properties="ContainerFile=$(WindowsDockerfile);ContainerKind=windows;ContainerRid1=win-x64;ContainerRid2=win-arm64;ContainerRequireNonRootUser=false"/>
+    <Message Importance="high" Text="ValidateContainers: OK (linux + windows Dockerfiles)."/>
+  </Target>
+
+  <!-- Per-Dockerfile rules, called by ValidateContainers with ContainerFile, ContainerKind
+       (linux|windows), ContainerRid1/ContainerRid2 and ContainerRequireNonRootUser set. -->
+  <Target Name="_ValidateContainerFile">
+    <Error Condition="!Exists('$(ContainerFile)')" Text="Missing Dockerfile: $(ContainerFile)"/>
+
+    <!-- Every FROM must resolve to an mcr.microsoft.com base image, either literally or via
+         an ARG indirection (${VAR}); ARG image defaults are checked separately below. -->
+    <Exec Command="findstr /R /C:&quot;^FROM&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_FromLines"/>
+    </Exec>
+    <Error Condition="'$(_FromLines)' == ''" Text="$(ContainerKind) Dockerfile has no FROM instruction: $(ContainerFile)"/>
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_FromLines)", "(?m)^FROM\s+(?!mcr\.microsoft\.com)(?!\x24)"))'
+           Text="$(ContainerKind) Dockerfile: every FROM must use an mcr.microsoft.com base image (literal or ARG default with mcr default). Offending FROM lines: $(_FromLines)"/>
+
+    <!-- No scratch base image. -->
+    <Exec Command="findstr /I /C:&quot;FROM scratch&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_ScratchExit"/>
+    </Exec>
+    <Error Condition="'$(_ScratchExit)' == '0'"
+           Text="$(ContainerKind) Dockerfile must not use a 'FROM scratch' base image: $(ContainerFile)"/>
+
+    <!-- An ARG default that looks like an image (contains '/') must be mcr.microsoft.com. -->
+    <Exec Command="findstr /R /C:&quot;^ARG&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_ArgLines"/>
+    </Exec>
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ArgLines)", "(?m)^ARG\s+\w+\s*=\s*(?!mcr\.microsoft\.com)\S*/"))'
+           Text="$(ContainerKind) Dockerfile: an ARG default that looks like an image must be mcr.microsoft.com. Offending ARG lines: $(_ArgLines)"/>
+
+    <!-- No ENV/ARG line may match (?i)(token|secret|password|credential). -->
+    <Exec Command="findstr /R /I /C:&quot;^ENV.*token&quot; /C:&quot;^ENV.*secret&quot; /C:&quot;^ENV.*password&quot; /C:&quot;^ENV.*credential&quot; /C:&quot;^ARG.*token&quot; /C:&quot;^ARG.*secret&quot; /C:&quot;^ARG.*password&quot; /C:&quot;^ARG.*credential&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_SecretExit"/>
+    </Exec>
+    <Error Condition="'$(_SecretExit)' == '0'"
+           Text="$(ContainerKind) Dockerfile: no ENV/ARG line may match (?i)(token|secret|password|credential): $(ContainerFile)"/>
+
+    <!-- Native AOT publish must be enabled in the image build. -->
+    <Exec Command="findstr /C:&quot;PublishAot=true&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_AotExit"/>
+    </Exec>
+    <Error Condition="'$(_AotExit)' != '0'"
+           Text="$(ContainerKind) Dockerfile must publish with PublishAot=true: $(ContainerFile)"/>
+
+    <!-- ENTRYPOINT is required. -->
+    <Exec Command="findstr /C:&quot;ENTRYPOINT&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_EntrypointExit"/>
+    </Exec>
+    <Error Condition="'$(_EntrypointExit)' != '0'"
+           Text="$(ContainerKind) Dockerfile must declare an ENTRYPOINT: $(ContainerFile)"/>
+
+    <!-- Linux images must run as the non-root UID 1654 (Windows containers have no POSIX UID). -->
+    <Exec Condition="'$(ContainerRequireNonRootUser)' == 'true'" Command="findstr /C:&quot;USER 1654&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_UserExit"/>
+    </Exec>
+    <Error Condition="'$(ContainerRequireNonRootUser)' == 'true' and '$(_UserExit)' != '0'"
+           Text="linux Dockerfile must run as non-root with 'USER 1654': $(ContainerFile)"/>
+
+    <!-- Both whitelisted RIDs must appear in the file. -->
+    <Exec Command="findstr /C:&quot;$(ContainerRid1)&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_Rid1Exit"/>
+    </Exec>
+    <Error Condition="'$(_Rid1Exit)' != '0'"
+           Text="$(ContainerKind) Dockerfile must whitelist RID $(ContainerRid1): $(ContainerFile)"/>
+    <Exec Command="findstr /C:&quot;$(ContainerRid2)&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
+      <Output TaskParameter="ExitCode" PropertyName="_Rid2Exit"/>
+    </Exec>
+    <Error Condition="'$(_Rid2Exit)' != '0'"
+           Text="$(ContainerKind) Dockerfile must whitelist RID $(ContainerRid2): $(ContainerFile)"/>
+
+    <Message Importance="high" Text="ValidateContainers: $(ContainerKind) OK ($(ContainerFile))."/>
+  </Target>
+
+  <!-- Publishes Native AOT single-file binaries for the whole RID perimeter into
+       .artifacts/publish/$(Version)/<rid>, then verifies each executable exists.
+       Usage: dotnet msbuild -t:PublishAll [-p:Version=...] -->
+  <Target Name="PublishAll" Condition="'$(_IsMcpProject)' == 'true'">
+    <Exec Command="dotnet publish &quot;$(McpCsproj)&quot; -c Release -r %(PublishRid.Identity) --self-contained true -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true -o &quot;$(PublishRoot)/$(Version)/%(PublishRid.Identity)&quot;"/>
+    <Error Condition="!Exists('$(PublishRoot)/$(Version)/%(PublishRid.Identity)/%(PublishRid.ExeName)')"
+           Text="PublishAll: expected executable missing for %(PublishRid.Identity): '$(PublishRoot)/$(Version)/%(PublishRid.Identity)/%(PublishRid.ExeName)'."/>
+    <Message Importance="high" Text="PublishAll: %(PublishRid.Identity) published to $(PublishRoot)/$(Version)/%(PublishRid.Identity)"/>
+  </Target>
+
+  <!-- Packs the MCP server as a NuGet tool (managed, non-AOT) into .artifacts/package/$(Configuration).
+       Usage: dotnet msbuild -t:Pack [-p:Configuration=Release] -->
+  <Target Name="Pack" Condition="'$(_IsMcpProject)' == 'true'">
+    <MakeDir Directories="$(PackageRoot)/$(Configuration)"/>
+    <Exec Command="dotnet pack &quot;$(McpCsproj)&quot; -c Release -p:PublishAot=false -p:SelfContained=false -o &quot;$(PackageRoot)/$(Configuration)&quot;"/>
+    <Message Importance="high" Text="Pack: package written to $(PackageRoot)/$(Configuration)"/>
+  </Target>
+
+  <!-- Archives every .artifacts/publish/$(Version)/<rid> output into .artifacts/release:
+       win-* -> .zip, linux-* -> .tar.gz. Uses bsdtar (`tar -a`, ships with Windows 11),
+       so no PowerShell is involved.
+       Usage: dotnet msbuild -t:Archive (after PublishAll) [-p:Version=...] -->
+  <Target Name="Archive" Condition="'$(_IsMcpProject)' == 'true'">
+    <MakeDir Directories="$(ReleaseRoot)"/>
+    <Error Condition="!Exists('$(PublishRoot)/$(Version)/%(PublishRid.Identity)')"
+           Text="Archive: no publish output for %(PublishRid.Identity) at '$(PublishRoot)/$(Version)/%(PublishRid.Identity)'. Run PublishAll first."/>
+    <Exec Command="tar -a -cf &quot;$(ReleaseRoot)/freenaute-freebox-mcp-$(Version)-%(PublishRid.Identity).%(PublishRid.ArchiveExt)&quot; -C &quot;$(PublishRoot)/$(Version)/%(PublishRid.Identity)&quot; ."/>
+    <Message Importance="high" Text="Archive: wrote $(ReleaseRoot)/freenaute-freebox-mcp-$(Version)-%(PublishRid.Identity).%(PublishRid.ArchiveExt)"/>
+  </Target>
+
+  <!-- Builds the local linux container image via the .NET SDK PublishContainer target.
+       Multi-arch manifests are produced in CI with docker buildx (see .github/workflows).
+       Usage: dotnet msbuild -t:PublishContainers [-p:Version=...] -->
+  <Target Name="PublishContainers" Condition="'$(_IsMcpProject)' == 'true'">
+    <Exec Command="dotnet publish &quot;$(McpCsproj)&quot; -c Release -t:PublishContainer -p:ContainerImageTag=$(Version)"/>
+    <Message Importance="high" Text="PublishContainers: local image freenaute-freebox-mcp:$(Version) built"/>
+  </Target>
+
+  <!-- Managed (framework-dependent, non-AOT) publish of the MCP host, the contract used by
+       the Protocol.Tests. Output: .artifacts/protocol-host/$(Configuration).
+       Usage: dotnet msbuild mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -t:BuildMcpHost -p:Configuration=Release
+       NOTE: MSBuild "last definition wins" gives this root definition precedence over a
+       same-named target declared in a .csproj (e.g. the local BuildMcpHost hook in
+       tests/Freenaute.Freebox.Mcp.Protocol.Tests), so test projects must invoke the MCP
+       project's target explicitly through the MSBuild task. -->
+  <Target Name="BuildMcpHost" Condition="'$(_IsMcpProject)' == 'true'">
+    <Exec Command="dotnet publish &quot;$(McpCsproj)&quot; -c $(Configuration) --self-contained false -p:PublishAot=false -p:PublishSingleFile=false -o &quot;$(ProtocolHostRoot)/$(Configuration)&quot;"/>
+    <Message Importance="high" Text="BuildMcpHost: managed host published to $(ProtocolHostRoot)/$(Configuration)"/>
+  </Target>
+</Project>

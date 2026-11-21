@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1707;CA2201;CS1591;IDE0005;IDE0008;IL2026;IL2057;IL2062;IL2065;IL2070;IL2072;IL2075;IL2077;IL2109;IL3050</NoWarn>
+    <McpHostProject>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\mcp\Freenaute.Freebox.Mcp\Freenaute.Freebox.Mcp.csproj'))</McpHostProject>
+    <!-- The host is always exercised from its Release contract build: dotnet msbuild <host> -t:BuildMcpHost -p:Configuration=Release -->
+    <McpHostConfiguration>Release</McpHostConfiguration>
+    <McpHostArtifactsRoot>$([System.IO.Path]::GetFullPath('$(ArtifactsPath)\protocol-host\$(McpHostConfiguration)\'))</McpHostArtifactsRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Baked-in host output path so tests can locate .artifacts/protocol-host/Release without hardcoding casing. -->
+    <AssemblyMetadata Include="McpHostArtifactsRoot" Value="$(McpHostArtifactsRoot)"/>
+  </ItemGroup>
+
+  <!--
+    Builds the MCP host before the test assembly by invoking the repo-root BuildMcpHost contract target
+    on the MCP project (dotnet msbuild mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj
+    -t:BuildMcpHost -p:Configuration=Release). The root Directory.Build.targets also declares a
+    same-named target (last definition wins), so this local hook uses a distinct name and calls the
+    MCP project's target explicitly through the MSBuild task.
+    Output contract: .artifacts/protocol-host/Release/Freenaute.Freebox.Mcp.dll (flat publish output).
+  -->
+  <Target Name="BuildProtocolHost" BeforeTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild
+      Projects="$(McpHostProject)"
+      Targets="BuildMcpHost"
+      SkipNonexistentTargets="true"
+      Properties="Configuration=$(McpHostConfiguration)"/>
+  </Target>
+</Project>

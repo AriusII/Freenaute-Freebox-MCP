@@ -424,3 +424,9 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+.idea/
+
+# Release orchestration now lives in MSBuild targets (Directory.Build.targets): no eng/ folder, no .ps1.
+eng/
+# .artifacts/ (see ".NET Core" section above) already covers publish/, package/, release/ and protocol-host/ outputs.

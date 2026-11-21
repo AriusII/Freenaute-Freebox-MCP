@@ -1,0 +1,13 @@
+<Project>
+  <Import Project="..\Directory.Build.props"/>
+
+  <!-- Every project under tests/ is a test project. Directory.Build.props is imported before the
+       csproj body, so IsTestProject is not visible here; these settings therefore apply unconditionally. -->
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CA1707;CA2201;CS1591;IDE0005;IDE0008;IL2026;IL2057;IL2062;IL2065;IL2070;IL2072;IL2075;IL2077;IL2109;IL3050</NoWarn>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,15 @@
+global using System.Collections.Immutable;
+global using System.Reflection;
+global using Freenaute.Freebox.Mcp.Core.Abstractions;
+global using Freenaute.Freebox.Mcp.Core.Errors;
+global using Freenaute.Freebox.Mcp.Core.Results;
+global using Freenaute.Freebox.Mapper.Contracts.Network;
+global using Freenaute.Freebox.Mapper.Contracts.Primitives;
+global using Freenaute.Freebox.Mapper.Contracts.SystemHome;
+global using Freenaute.Freebox.Mapper.ServerSide.General;
+global using Freenaute.Freebox.Mcp.Resources.Documentation;
+global using Freenaute.Freebox.Mcp.Resources.Live;
+global using Freenaute.Freebox.Mcp.Resources.Models;
+global using ModelContextProtocol.Protocol;
+global using ModelContextProtocol.Server;
+global using Xunit;
