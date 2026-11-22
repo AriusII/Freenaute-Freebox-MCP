@@ -10,6 +10,11 @@ on:
         description: "Release version override (for manual runs only)"
         required: false
         type: string
+      publish_windows_arm_container:
+        description: "Publish windows/arm64 container (requires ARM runner with Docker available)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -22,7 +27,7 @@ env:
   SOLUTION: Freenaute.Freebox.MCP.slnx
   MCP_PROJECT: mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj
   CONFIGURATION: Release
-  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  GHCR_IMAGE: ghcr.io/ariusii/freenaute-freebox-mcp
 
 jobs:
   resolve:
@@ -125,17 +130,8 @@ jobs:
         run: dotnet restore ${{ env.MCP_PROJECT }} -r ${{ matrix.rid }}
 
       - name: Publish (Native AOT, single file)
-        run: |
-          dotnet publish ${{ env.MCP_PROJECT }} \
-            -c ${{ env.CONFIGURATION }} \
-            -r ${{ matrix.rid }} \
-            --self-contained true \
-            --no-restore \
-            -p:PublishAot=true \
-            -p:PublishSingleFile=true \
-            -p:InvariantGlobalization=true \
-            -p:Version=${{ needs.resolve.outputs.version }} \
-            -o .artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}
+        shell: pwsh
+        run: dotnet publish ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -r ${{ matrix.rid }} --self-contained true --no-restore -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true -p:Version=${{ needs.resolve.outputs.version }} -o .artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}
 
       - name: Archive (tar.gz)
         if: matrix.archive_ext == 'tar.gz'
@@ -159,54 +155,6 @@ jobs:
           name: release-asset-${{ matrix.rid }}
           path: .artifacts/release/
           retention-days: 30
-
-  pack:
-    name: Pack and publish NuGet package
-    needs:
-      - resolve
-      - validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ needs.resolve.outputs.sdk }}
-
-      - name: Restore
-        run: dotnet restore ${{ env.SOLUTION }}
-
-      - name: Pack MCP tool package
-        run: dotnet msbuild -t:Pack -p:Configuration=${{ env.CONFIGURATION }} -p:Version=${{ needs.resolve.outputs.version }}
-
-      - name: Upload NuGet package artifacts
-        uses: actions/upload-artifact@v6
-        with:
-          name: nupkg
-          path: .artifacts/package/${{ env.CONFIGURATION }}/
-          retention-days: 30
-
-      - name: NuGet login (OIDC trusted publishing)
-        id: login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      - name: Push packages to NuGet.org
-        shell: bash
-        run: |
-          for pkg in .artifacts/package/${{ env.CONFIGURATION }}/*.nupkg .artifacts/package/${{ env.CONFIGURATION }}/*.snupkg; do
-            [ -e "$pkg" ] || continue
-            dotnet nuget push "$pkg" \
-              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
-          done
 
   containers-linux:
     name: Publish Linux containers (amd64 + arm64 + manifest)
@@ -285,17 +233,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build and push windows/amd64
         shell: pwsh
         run: |
-          docker buildx build --platform windows/amd64 -f containers/windows/x64/Dockerfile `
-            --build-arg VERSION=${{ needs.resolve.outputs.version }} `
-            -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-amd64 `
-            -t ${{ env.GHCR_IMAGE }}:windows-amd64 `
-            --push .
+          docker build -f containers/windows/x64/Dockerfile --build-arg VERSION=${{ needs.resolve.outputs.version }} -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-amd64 -t ${{ env.GHCR_IMAGE }}:windows-amd64 .
+          docker push ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-amd64
+          docker push ${{ env.GHCR_IMAGE }}:windows-amd64
 
   containers-windows-arm64:
     name: Publish Windows container (arm64)
@@ -303,6 +246,7 @@ jobs:
       - resolve
       - validate
     runs-on: windows-11-arm
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_windows_arm_container }}
     permissions:
       contents: read
       packages: write
@@ -317,17 +261,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build and push windows/arm64
         shell: pwsh
         run: |
-          docker buildx build --platform windows/arm64 -f containers/windows/arm/Dockerfile `
-            --build-arg VERSION=${{ needs.resolve.outputs.version }} `
-            -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-arm64 `
-            -t ${{ env.GHCR_IMAGE }}:windows-arm64 `
-            --push .
+          docker build -f containers/windows/arm/Dockerfile --build-arg VERSION=${{ needs.resolve.outputs.version }} -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-arm64 -t ${{ env.GHCR_IMAGE }}:windows-arm64 .
+          docker push ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-arm64
+          docker push ${{ env.GHCR_IMAGE }}:windows-arm64
 
   release:
     name: Assemble and publish GitHub release
@@ -335,10 +274,8 @@ jobs:
       - resolve
       - validate
       - publish-binaries
-      - pack
       - containers-linux
       - containers-windows-x64
-      - containers-windows-arm64
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -352,12 +289,6 @@ jobs:
           pattern: release-asset-*
           path: dist/binaries
           merge-multiple: true
-
-      - name: Download NuGet packages
-        uses: actions/download-artifact@v6
-        with:
-          name: nupkg
-          path: dist/nuget
 
       - name: Generate SBOM (SPDX JSON)
         uses: anchore/sbom-action@v0
@@ -382,8 +313,6 @@ jobs:
           name: Release ${{ github.ref_name }}
           files: |
             dist/binaries/*
-            dist/nuget/*.nupkg
-            dist/nuget/*.snupkg
             dist/sbom.spdx.json
             dist/SHA256SUMS.txt
           prerelease: ${{ contains(github.ref_name, '-') }}
