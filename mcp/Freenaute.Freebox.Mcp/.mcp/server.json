@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "description": "Local stdio MCP server for read-only Freebox discovery, pairing coordination, and system/network status.",
+  "description": "Local stdio MCP server for Freebox Server.",
   "name": "org.freenaute/freenaute-freebox-mcp",
   "version": "0.1.0-beta",
   "packages": [
@@ -48,6 +48,24 @@
           "description": "Freebox server base address passed to the Freebox client.",
           "isRequired": false,
           "default": "https://mafreebox.freebox.fr/"
+        },
+        {
+          "name": "FREEBOX_PAIRING_POLL_INTERVAL_SECONDS",
+          "description": "Optional polling interval (seconds) used by freebox_pairing_wait when no explicit value is provided.",
+          "isRequired": false,
+          "default": "2"
+        },
+        {
+          "name": "FREEBOX_PAIRING_WAIT_TIMEOUT_SECONDS",
+          "description": "Optional timeout (seconds) used by freebox_pairing_wait when no explicit value is provided.",
+          "isRequired": false,
+          "default": "600"
+        },
+        {
+          "name": "FREEBOX_AUTHENTICATE_ON_STARTUP",
+          "description": "Enable automatic startup authentication bootstrap using persisted credentials and optional pairing policy.",
+          "isRequired": false,
+          "default": "true"
         },
         {
           "name": "FREEBOX_CREDENTIAL_FILE",

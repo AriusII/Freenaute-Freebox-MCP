@@ -35,5 +35,5 @@ eng
 #   keep the context small (the .slnx is NOT restored inside the image).
 tests
 # - containers/ itself, to avoid recursion when building from the repo root
-#   (docker build -f containers/Dockerfile .)
+#   (docker build -f containers/linux/x64/Dockerfile .)
 containers

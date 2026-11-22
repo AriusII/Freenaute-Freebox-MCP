@@ -1,5 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
-
 namespace Freenaute.Freebox.Mcp.Core.Tests.Orchestration;
 
 public sealed class PairingPersistenceTests
@@ -176,6 +174,39 @@ public sealed class PairingPersistenceTests
     }
 
     [Fact]
+    public async Task WaitForApproval_LocalTimeout_ReturnsExpiredState()
+    {
+        var coordinator = new RecordingAuthorizationCoordinator { BlockUntilCancellation = true };
+        FreeboxOrchestrator orchestrator = CreateOrchestrator(coordinator, new RecordingCredentialStore());
+
+        FreeboxCoreResult<FreeboxCredentialResult> result = await orchestrator.WaitForApprovalAsync(
+            timeout: TimeSpan.FromMilliseconds(20),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(FreeboxCredentialState.Expired, result.Value!.State);
+        Assert.Equal(1, coordinator.WaitCalls);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 0)]
+    public async Task WaitForApproval_InvalidTimingValues_ReturnInvalidRequest(int pollSeconds, int timeoutSeconds)
+    {
+        var coordinator = new RecordingAuthorizationCoordinator();
+        FreeboxOrchestrator orchestrator = CreateOrchestrator(coordinator, new RecordingCredentialStore());
+
+        FreeboxCoreResult<FreeboxCredentialResult> result = await orchestrator.WaitForApprovalAsync(
+            TimeSpan.FromSeconds(pollSeconds),
+            TimeSpan.FromSeconds(timeoutSeconds),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(FreeboxCoreErrorCode.InvalidRequest, result.Error!.Code);
+        Assert.Equal(0, coordinator.WaitCalls);
+    }
+
+    [Fact]
     public async Task CredentialStoreAdapter_VerifiesWriteAndDeleteAgainstDurableStore()
     {
         var storage = new RecordingCredentialStorage { IsAvailable = true };
@@ -316,7 +347,9 @@ public sealed class PairingPersistenceTests
         IFreeboxClient? client = null)
     {
         client ??= DispatchProxy.Create<IFreeboxClient, ThrowingClientProxy>()!;
-        return new FreeboxOrchestrator(client, authorization, credentialStore,
+        IFreeboxDataRepository dataRepository = new FreeboxDataRepository(client);
+        IFreeboxAuthenticationRepository authenticationRepository = new FreeboxAuthenticationRepository(authorization);
+        return new FreeboxOrchestrator(dataRepository, authenticationRepository, credentialStore,
             Microsoft.Extensions.Options.Options.Create(new FreeboxCoreOptions
             {
                 ApplicationId = "org.freenaute.freebox-mcp",
@@ -430,6 +463,7 @@ public sealed class PairingPersistenceTests
         public int ForgetCalls { get; private set; }
         public int WaitCalls { get; private set; }
         public bool ThrowCancellationOnWait { get; init; }
+        public bool BlockUntilCancellation { get; init; }
         public AuthorizationTrackEnum? AuthorizationFailure { get; init; }
 
         public FreeboxApprovalRegistration Registration { get; init; } =
@@ -449,6 +483,11 @@ public sealed class PairingPersistenceTests
             CancellationToken cancellationToken = default)
         {
             WaitCalls++;
+            if (BlockUntilCancellation)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
             if (ThrowCancellationOnWait && WaitCalls == 1)
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);

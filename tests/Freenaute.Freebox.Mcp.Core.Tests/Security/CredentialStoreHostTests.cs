@@ -11,9 +11,12 @@ public sealed class CredentialStoreHostTests
         string key = CredentialStoreKey.For(baseline);
 
         Assert.Equal(key, CredentialStoreKey.For(new FreeboxCredentialId("profile", "application", "freebox-uid-1")));
-        Assert.NotEqual(key, CredentialStoreKey.For(new FreeboxCredentialId("profile", "application", "freebox-uid-2")));
-        Assert.NotEqual(key, CredentialStoreKey.For(new FreeboxCredentialId("profile", "application-two", "freebox-uid-1")));
-        Assert.NotEqual(key, CredentialStoreKey.For(new FreeboxCredentialId("profile-two", "application", "freebox-uid-1")));
+        Assert.NotEqual(key,
+            CredentialStoreKey.For(new FreeboxCredentialId("profile", "application", "freebox-uid-2")));
+        Assert.NotEqual(key,
+            CredentialStoreKey.For(new FreeboxCredentialId("profile", "application-two", "freebox-uid-1")));
+        Assert.NotEqual(key,
+            CredentialStoreKey.For(new FreeboxCredentialId("profile-two", "application", "freebox-uid-1")));
         Assert.DoesNotContain("profile", key, StringComparison.Ordinal);
         Assert.DoesNotContain("application", key, StringComparison.Ordinal);
         Assert.DoesNotContain("freebox-uid-1", key, StringComparison.Ordinal);
@@ -39,7 +42,8 @@ public sealed class CredentialStoreHostTests
         string freeboxUid = id.FreeboxUid ?? string.Empty;
         string applicationId = id.ApplicationId ?? string.Empty;
         string profile = id.Profile ?? string.Empty;
-        string scope = $"{freeboxUid.Length}:{freeboxUid}{applicationId.Length}:{applicationId}{profile.Length}:{profile}";
+        string scope =
+            $"{freeboxUid.Length}:{freeboxUid}{applicationId.Length}:{applicationId}{profile.Length}:{profile}";
         string expectedSuffix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(scope)));
 
         Assert.Equal(ExpectedKeyPrefix + expectedSuffix, CredentialStoreKey.For(id));

@@ -65,7 +65,7 @@ public sealed class OrchestratorFreeboxLiveResourceSourceTests
         {
             var snapshot = new FreeboxSystemSnapshot(
                 "firmware", "model", "AA-BB-CC-DD-EE-FF private uid", 3600, null, null, null, null,
-                Enumerable.Range(0, 20).Select(_ => new FreeboxSystemSensorSnapshot("id", null)).ToArray(),
+                [.. Enumerable.Range(0, 20).Select(_ => new FreeboxSystemSensorSnapshot("id", null))],
                 [], []);
             return ValueTask.FromResult(CreateSuccess(snapshot));
         }
@@ -77,7 +77,9 @@ public sealed class OrchestratorFreeboxLiveResourceSourceTests
         }
 
         public ValueTask<FreeboxCoreResult<FreeboxCredentialResult>> WaitForApprovalAsync(
-            TimeSpan? pollInterval = null, CancellationToken cancellationToken = default)
+            TimeSpan? pollInterval = null,
+            TimeSpan? timeout = null,
+            CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }

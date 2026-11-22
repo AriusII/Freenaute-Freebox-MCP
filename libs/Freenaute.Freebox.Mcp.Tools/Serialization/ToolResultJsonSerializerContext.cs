@@ -1,3 +1,5 @@
+using Freenaute.Freebox.Mcp.Tools.Parental;
+
 namespace Freenaute.Freebox.Mcp.Tools.Serialization;
 
 [JsonSerializable(typeof(DiscoveryToolResult))]
@@ -8,6 +10,27 @@ namespace Freenaute.Freebox.Mcp.Tools.Serialization;
 [JsonSerializable(typeof(ConnectionToolResult))]
 [JsonSerializable(typeof(LanToolResult))]
 [JsonSerializable(typeof(WifiToolResult))]
+[JsonSerializable(typeof(DownloadsToolResult))]
+[JsonSerializable(typeof(DownloadToolResult))]
+[JsonSerializable(typeof(DownloadStatsToolResult))]
+[JsonSerializable(typeof(DownloadConfigurationToolResult))]
+[JsonSerializable(typeof(DownloadFilesToolResult))]
+[JsonSerializable(typeof(DownloadLogToolResult))]
+[JsonSerializable(typeof(DownloadPiecesToolResult))]
+[JsonSerializable(typeof(CallLogToolResult))]
+[JsonSerializable(typeof(CallAccountToolResult))]
+[JsonSerializable(typeof(CallMutationToolResult))]
+[JsonSerializable(typeof(CamerasToolResult))]
+[JsonSerializable(typeof(HomeStatusToolResult))]
+[JsonSerializable(typeof(ContactsToolResult))]
+[JsonSerializable(typeof(AirMediaStatusToolResult))]
+[JsonSerializable(typeof(AirMediaReceiversToolResult))]
+[JsonSerializable(typeof(NasVisibilityToolResult))]
+[JsonSerializable(typeof(SharesVisibilityToolResult))]
+[JsonSerializable(typeof(ParentalConfigToolResult))]
+[JsonSerializable(typeof(ParentalFiltersToolResult))]
+[JsonSerializable(typeof(StatusFeedToolResult))]
+[JsonSerializable(typeof(NotificationFeedToolResult))]
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

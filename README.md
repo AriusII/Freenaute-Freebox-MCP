@@ -34,7 +34,7 @@ Useful links:
 | `freebox_discover` | yes | Discover the reachable Freebox; returns bounded, non-identifying API metadata (model, API version, HTTPS port). |
 | `freebox_pairing_status` | yes | Report durable credential state (`Missing`, `Pending`, `Approved`, `Denied`, `Expired`, `Corrupt`, `Unavailable`) without exposing secrets. |
 | `freebox_pairing_initiate` | no (gated) | Start a new pairing. Only allowed when `FREEBOX_ALLOW_PAIRING_INITIATION` is `1`/`true`/`TRUE`. Physical approval is still required. |
-| `freebox_pairing_wait` | no | Poll an existing pairing until physical approval; cancellable and resumable. |
+| `freebox_pairing_wait` | no | Poll an existing pairing until physical approval; cancellable/resumable with optional poll interval and timeout overrides. |
 | `freebox_connection_status` | yes | Connection state, type, media, rates, traffic counters. Network addresses are excluded. |
 | `freebox_lan_overview` | yes | Bounded LAN summary per interface; optional hosts (`includeHosts`, `interfaceName`). Host identifiers are SHA-256 hashes; names/domains/addresses are excluded. |
 | `freebox_wifi_status` | yes | Sanitized Wi-Fi state, access points and BSS list. SSIDs, BSSIDs and host identifiers are excluded/hashed. |
@@ -42,8 +42,8 @@ Useful links:
 
 ### MCP resources
 
-- `freebox://docs/en/overview`, `freebox://docs/en/resources`
-- `freebox://docs/fr/overview`, `freebox://docs/fr/resources`
+- `freebox://docs/en/overview`, `freebox://docs/en/resources`, `freebox://docs/en/quickstart`, `freebox://docs/en/auth-pairing`
+- `freebox://docs/fr/overview`, `freebox://docs/fr/resources`, `freebox://docs/fr/quickstart`, `freebox://docs/fr/authentification-appairage`
 - `freebox://live/status` — current sanitized status snapshot (markdown, bounded to 64 KiB)
 
 The `freebox://docs/...` documents are embedded resources (`EmbeddedResource` in
@@ -55,7 +55,7 @@ The `freebox://docs/...` documents are embedded resources (`EmbeddedResource` in
 .
 ├── mcp/Freenaute.Freebox.Mcp/        # MCP host: Program.cs, Security/ (credential storage), .mcp/server.json, README (NuGet package readme)
 ├── libs/
-│   ├── Freenaute.Freebox.Mcp.Core/   # Options, FreeboxOrchestrator, error mapping, credential-store adapter, secret redactor
+│   ├── Freenaute.Freebox.Mcp.Core/   # Options, DI composition, SDK repositories/services, orchestrator, error mapping, credential store, redaction
 │   ├── Freenaute.Freebox.Mcp.Tools/  # The 8 [McpServerTool] classes + sanitization (Safe) + result DTOs
 │   └── Freenaute.Freebox.Mcp.Resources/ # MCP resources: embedded Docs/** and freebox://live/status
 ├── tests/                            # xUnit v3 + Microsoft.Testing.Platform (Core, Tools, Resources, Protocol/stdio)
@@ -111,14 +111,13 @@ dnx Freenaute.Freebox.Mcp --version 0.1.0-beta --yes
 }
 ```
 
-The package identity in `.mcp/server.json` is `io.github.freenaute/freenaute-freebox-mcp`.
+The package identity in `.mcp/server.json` is `org.freenaute/freenaute-freebox-mcp`.
 
 ### 3. Install as a .NET global tool
 
 ```powershell
 dotnet tool install --global Freenaute.Freebox.Mcp
 freenaute-freebox-mcp          # stdio server
-freenaute-freebox-mcp import-token --freebox-uid <freebox-uid>   # see below
 ```
 
 ### 4. Run the Native AOT binary
@@ -130,7 +129,16 @@ dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
 # then launch the single-file executable directly; no runtime install needed
 ```
 
-Supported publish RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`.
+`PublishAot` and `InvariantGlobalization` are project-owned settings; the explicit
+`-p:PublishAot=true` above makes the release intent visible. Publishing is RID-specific, so
+smoke-test the binary for each target. A Linux AOT binary runs only on the same or newer
+compatible Linux version on which it was built.
+
+Supported publish RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64` (Windows + Linux, x64 + ARM only).
+The repository enables `IsAotCompatible` plus trimming and single-file analysis and treats
+warnings as errors. Review and resolve publish warnings rather than suppressing them; AOT
+trimming and Native AOT do not support unbounded runtime reflection or runtime code generation.
+See [Microsoft Learn: Native AOT deployment](https://learn.microsoft.com/dotnet/core/deploying/native-aot/).
 
 ### 5. Run in a container (Linux amd64/arm64)
 
@@ -146,13 +154,19 @@ All optional; all are declared in `mcp/Freenaute.Freebox.Mcp/.mcp/server.json`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `FREEBOX_APPLICATION_ID` | `io.github.freenaute.freebox-mcp` | Freebox application identifier registered during pairing. |
+| `FREEBOX_APPLICATION_ID` | `org.freenaute.freebox-mcp` | Freebox application identifier registered during pairing. |
 | `FREEBOX_APPLICATION_NAME` | `Freenaute Freebox MCP` | Display name shown on the Freebox during pairing. |
 | `FREEBOX_DEVICE_NAME` | machine name (`Environment.MachineName`) | Client device name shown during pairing. |
 | `FREEBOX_CREDENTIAL_PROFILE` | `default` | Local credential profile name; scopes the stored credential together with the application ID and the Freebox UID. |
 | `FREEBOX_ALLOW_PAIRING_INITIATION` | unset (disabled) | Opt-in switch: pairing initiation is allowed **only** when set exactly to `1`, `true`, or `TRUE`. Waiting on an already-started pairing (`freebox_pairing_wait`) does not require it. |
+| `FREEBOX_SERVER_ADDRESS` | `https://mafreebox.freebox.fr/` | Absolute http(s) origin of the Freebox API (no path/credentials/query). |
+| `FREEBOX_PAIRING_POLL_INTERVAL_SECONDS` | `2` | Default polling interval for `freebox_pairing_wait` when no tool override is provided; must be `> 0`. |
+| `FREEBOX_PAIRING_WAIT_TIMEOUT_SECONDS` | `600` | Default timeout for `freebox_pairing_wait` when no tool override is provided; must be `> 0`. |
+| `FREEBOX_AUTHENTICATE_ON_STARTUP` | `true` | Enables startup authentication bootstrap: reuse persisted credential state and, if policy allows, startup pairing wait workflow. |
+| `FREEBOX_CREDENTIAL_FILE` | unset | Optional encrypted-file store (AES-256-GCM) for containers/headless; enables storage only when set. |
+| `FREEBOX_CREDENTIAL_PASSPHRASE_FILE` | unset | File containing the passphrase for `FREEBOX_CREDENTIAL_FILE` (mounted secret, e.g. `/run/secrets/...`). |
 
-The Freebox server address defaults to `https://mafreebox.freebox.fr/` (see `FreeboxCoreOptions.ServerAddress`).
+The Freebox server address defaults to `https://mafreebox.freebox.fr/` (see `FREEBOX_SERVER_ADDRESS` and `FreeboxCoreOptions.ServerAddress`).
 
 **Never** put a token, app secret, or credential in an environment variable, argv, an MCP config file, or a log.
 
@@ -166,7 +180,7 @@ The HTTP flow below is implemented by `Freenaute.Freebox.Client`; the MCP server
    is no way to bypass this; `freebox_pairing_initiate` refuses to run at all unless
    `FREEBOX_ALLOW_PAIRING_INITIATION` opts in.
 3. **Poll**: `GET /api/v*/login/authorize/{track_id}` returns `pending`, `granted`, `denied`, or `timeout`.
-   `freebox_pairing_wait` polls this and can be cancelled/resumed safely.
+   `freebox_pairing_wait` polls this and can be cancelled/resumed safely, with optional per-call polling/timeout overrides.
 4. **Session**: on `granted`, `GET /api/v*/login/` returns a `challenge`; the client computes
    `password = HMAC-SHA1(app_token, challenge)` and posts it to `POST /api/v*/login/session/`, receiving a
    `session_token`.
@@ -188,16 +202,10 @@ freebox_wifi_status         -> Wi-Fi summary
 freebox_system_status       -> firmware/uptime/sensors/fans
 ```
 
-### Importing an existing app token
+### Command-line policy
 
-```powershell
-freenaute-freebox-mcp import-token --freebox-uid <freebox-uid> [--application-id <id>] [--profile <name>]
-```
-
-The token is read from **stdin only** (masked prompt at an interactive terminal, or a protected pipe in automation).
-It is **never accepted as a command-line argument** (a `--token` argument is rejected without echoing it), never read
-from an env var, and never logged. The write is verified by a read-back comparison. On platforms without a supported
-OS vault (e.g. Linux containers) the command **fails closed** and stores nothing.
+The MCP server accepts **no launch arguments**. Pairing/bootstrap is performed through MCP tools and startup
+authentication only.
 
 ## Security model
 
@@ -206,10 +214,13 @@ Details: [mcp/Freenaute.Freebox.Mcp/Security/README.md](mcp/Freenaute.Freebox.Mc
 - **Credential storage matrix**
   - Windows: Credential Manager via `CredWriteW`/`CredReadW` (`CRED_TYPE_GENERIC`, `CRED_PERSIST_LOCAL_MACHINE`),
     DPAPI-encrypted, local to the logon environment.
-  - macOS: the default Security.framework generic-password **Keychain**.
-  - Linux / containers / headless: **fail-closed** — no storage, nothing written to plaintext files, re-pairing
-    required on restart. There is deliberately no plaintext fallback (no libsecret, no encrypted-file mode).
-- **Key scoping:** storage key = `io.github.freenaute.freebox-mcp/credentials:` + hex(SHA-256(length-prefixed
+  - Linux: **libsecret / Secret Service** via the `secret-tool` CLI when available.
+  - Containers / headless: optional **AES-256-GCM encrypted file** (`FREEBOX_CREDENTIAL_FILE` +
+    `FREEBOX_CREDENTIAL_PASSPHRASE_FILE`, typically mounted under `/run/secrets/`).
+  - Anything else: **fail-closed** (`UnsupportedCredentialStorage`) — nothing written to plaintext files,
+    re-pairing required on restart. There is deliberately never a plaintext fallback.
+  - Selection order: encrypted-file env opt-in → Windows Credential Manager → Linux libsecret → fail-closed.
+- **Key scoping:** storage key = `org.freenaute.freebox-mcp/credentials:` + hex(SHA-256(length-prefixed
   Freebox UID + application ID + profile)). Buffers are zeroized after use.
 - **Payload:** versioned JSON (format version 1) serialized with a source-generated `JsonSerializerContext`;
   every write is followed by a read-back verification with a fixed-time comparison.
@@ -250,6 +261,19 @@ dotnet pack mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -c Release   
 NuGet packages are managed centrally (`Directory.Packages.props`, CPM) with lock files
 (`RestorePackagesWithLockFile`); the only package sources is nuget.org (`NuGet.Config`).
 
+### Startup composition
+
+`Program.cs` is the composition root. It completes all `IServiceCollection` registrations
+before `builder.Build()` and starts the host once with `RunAsync()`. Reusable
+`AddFreebox...` extensions keep feature-owned lifetimes in their own assemblies; application
+code consumes interfaces rather than a separate provider or service-locator root.
+`ValidateOnStart()` validates options during host startup, while the container owns
+construction and disposal of services it creates. New registrations should follow that
+pattern and enable scope validation in tests rather than calling `BuildServiceProvider()`
+during composition. See Microsoft Learn:
+[DI overview](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/overview)
+and [DI guidelines](https://learn.microsoft.com/dotnet/core/extensions/dependency-injection/guidelines).
+
 ## Tests
 
 xUnit v3 with the Microsoft.Testing.Platform runner (see `global.json` `test.runner`):
@@ -259,8 +283,8 @@ dotnet test Freenaute.Freebox.MCP.slnx --configuration Release
 ```
 
 Test projects: `Freenaute.Freebox.Mcp.Core.Tests`, `...Tools.Tests`, `...Resources.Tests`,
-`...Protocol.Tests` (the latter spawns the real stdio host and asserts `tools/list` / `resources/list` /
-`resources/read` and the `import-token` fail-closed behavior).
+`...Protocol.Tests` (the latter spawns the real stdio host and asserts `initialize`, `tools/list`,
+`resources/list`, and `resources/read` behavior).
 
 ## Containers
 

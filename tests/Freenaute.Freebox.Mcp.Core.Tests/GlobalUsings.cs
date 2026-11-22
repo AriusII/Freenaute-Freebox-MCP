@@ -1,6 +1,7 @@
 global using System.Globalization;
 global using System.ComponentModel;
 global using System.Diagnostics;
+global using System.Diagnostics.CodeAnalysis;
 global using System.Net;
 global using System.Reflection;
 global using System.Runtime.InteropServices;
@@ -23,5 +24,6 @@ global using Freenaute.Freebox.Mcp.Core.Results;
 global using Freenaute.Freebox.Mcp.Core.Security;
 global using Freenaute.Freebox.Mcp.Core.Serialization;
 global using Freenaute.Freebox.Mcp.Core.DependencyInjection;
+global using Freenaute.Freebox.Mcp.Core.Repositories;
 global using Microsoft.Extensions.DependencyInjection;
 global using Xunit;

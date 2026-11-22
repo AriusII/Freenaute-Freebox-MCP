@@ -8,8 +8,10 @@
     <File Path="NuGet.Config"/>
   </Folder>
   <Folder Name="/containers/">
-    <File Path="containers/Dockerfile"/>
-    <File Path="containers/windows/Dockerfile"/>
+    <File Path="containers/linux/x64/Dockerfile"/>
+    <File Path="containers/linux/arm/Dockerfile"/>
+    <File Path="containers/windows/x64/Dockerfile"/>
+    <File Path="containers/windows/arm/Dockerfile"/>
     <File Path="containers/README.md"/>
   </Folder>
   <Folder Name="/libs/"/>

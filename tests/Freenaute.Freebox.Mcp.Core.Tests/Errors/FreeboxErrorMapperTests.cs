@@ -32,14 +32,17 @@ public sealed class FreeboxErrorMapperTests
     {
         ConstructorInfo constructor = Assert.Single(typeof(FreeboxApiException).GetConstructors(
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic));
-        object?[] arguments = Enumerable.Range(0, constructor.GetParameters().Length)
-            .Select<int, object?>(index => index switch
-            {
-                0 => status,
-                1 => "api_rejected",
-                2 => "session_token=secret",
-                _ => null
-            }).ToArray();
+        object?[] arguments =
+        [
+            .. Enumerable.Range(0, constructor.GetParameters().Length)
+                .Select<int, object?>(index => index switch
+                {
+                    0 => status,
+                    1 => "api_rejected",
+                    2 => "session_token=secret",
+                    _ => null
+                })
+        ];
         FreeboxApiException exception = Assert.IsType<FreeboxApiException>(constructor.Invoke(arguments));
         FreeboxCoreError error = FreeboxErrorMapper.Map(exception, "corr");
         Assert.Equal(expected, error.Code);

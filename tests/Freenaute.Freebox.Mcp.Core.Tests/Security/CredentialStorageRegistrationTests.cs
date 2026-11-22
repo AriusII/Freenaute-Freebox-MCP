@@ -1,6 +1,4 @@
 #if HAS_CREDENTIAL_STORAGE_REGISTRATION
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Freenaute.Freebox.Mcp.Core.Tests.Security;
 
 [Collection(CredentialEnvironment.Name)]
@@ -63,7 +61,7 @@ public sealed class CredentialStorageRegistrationTests : IDisposable
     public void AddPlatformCredentialStorage_CredentialFileEnvWinsOnAnyPlatform()
     {
         string temporaryFile = Path.Combine(Path.GetTempPath(), "freenaute-registration-" +
-            Guid.NewGuid().ToString("N") + ".bin");
+                                                                Guid.NewGuid().ToString("N") + ".bin");
         Environment.SetEnvironmentVariable("FREEBOX_CREDENTIAL_FILE", temporaryFile);
         try
         {

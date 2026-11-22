@@ -13,4 +13,7 @@ public sealed class FreeboxCoreOptions
     public TimeSpan MdnsTimeout { get; set; } = TimeSpan.FromSeconds(2);
     public bool EnableResilience { get; set; } = true;
     public bool AllowPairingInitiation { get; set; }
+    public TimeSpan PairingPollInterval { get; set; } = TimeSpan.FromSeconds(2);
+    public TimeSpan PairingWaitTimeout { get; set; } = TimeSpan.FromMinutes(10);
+    public bool AuthenticateOnStartup { get; set; } = true;
 }

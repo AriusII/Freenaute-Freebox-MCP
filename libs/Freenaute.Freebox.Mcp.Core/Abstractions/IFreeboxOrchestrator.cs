@@ -6,6 +6,7 @@ public interface IFreeboxOrchestrator
 
     ValueTask<FreeboxCoreResult<FreeboxCredentialResult>> WaitForApprovalAsync(
         TimeSpan? pollInterval = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default);
 
     ValueTask<FreeboxCoreResult<FreeboxConnectionResult>> GetConnectionStatusAsync(

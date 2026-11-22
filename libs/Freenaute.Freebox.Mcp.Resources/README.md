@@ -6,13 +6,17 @@ uses the .NET MCP SDK.
 
 ## Resources (`[McpServerResourceType]`)
 
-| URI                           | Name                        | Content                                                                             |
-|-------------------------------|-----------------------------|-------------------------------------------------------------------------------------|
-| `freebox://docs/en/overview`  | `freebox-docs-en-overview`  | English overview (capabilities, pairing workflow, safety rules) — LLM-facing.       |
-| `freebox://docs/en/resources` | `freebox-docs-en-resources` | English catalog of tools/resources with examples — LLM-facing.                      |
-| `freebox://docs/fr/overview`  | `freebox-docs-fr-overview`  | French overview.                                                                    |
-| `freebox://docs/fr/resources` | `freebox-docs-fr-resources` | French catalog.                                                                     |
-| `freebox://live/status`       | `freebox-live-status`       | Current sanitized Freebox status as markdown (pairing / network / system sections). |
+| URI                                            | Name                                         | Content                                                                             |
+|------------------------------------------------|----------------------------------------------|-------------------------------------------------------------------------------------|
+| `freebox://docs/en/overview`                   | `freebox-docs-en-overview`                   | English overview (capabilities, pairing workflow, safety rules) — LLM-facing.       |
+| `freebox://docs/en/resources`                  | `freebox-docs-en-resources`                  | English catalog of tools/resources with examples — LLM-facing.                      |
+| `freebox://docs/en/quickstart`                 | `freebox-docs-en-quickstart`                 | English quickstart workflow for MCP operations.                                     |
+| `freebox://docs/en/auth-pairing`               | `freebox-docs-en-auth-pairing`               | English authentication/pairing model mapped to MCP behavior.                        |
+| `freebox://docs/fr/overview`                   | `freebox-docs-fr-overview`                   | French overview.                                                                    |
+| `freebox://docs/fr/resources`                  | `freebox-docs-fr-resources`                  | French catalog.                                                                     |
+| `freebox://docs/fr/quickstart`                 | `freebox-docs-fr-quickstart`                 | Démarrage rapide en français.                                                       |
+| `freebox://docs/fr/authentification-appairage` | `freebox-docs-fr-authentification-appairage` | Authentification/appairage en français.                                             |
+| `freebox://live/status`                        | `freebox-live-status`                        | Current sanitized Freebox status as markdown (pairing / network / system sections). |
 
 All are served as `text/markdown`.
 
@@ -39,4 +43,5 @@ types with the MCP server builder).
 ## Dependencies
 
 - Project: `Freenaute.Freebox.Mcp.Core` (orchestrator abstractions for the live source).
-- NuGet: `ModelContextProtocol` (CPM).
+- Runtime dependencies are centralized in `Freenaute.Freebox.Mcp.Core` (including shared MCP/hosting packages via
+  transitive references).

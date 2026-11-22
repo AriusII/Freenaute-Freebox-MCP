@@ -1,8 +1,8 @@
 namespace Freenaute.Freebox.Mcp.Core.Orchestration;
 
 public sealed class FreeboxOrchestrator(
-    IFreeboxClient client,
-    IFreeboxAuthorizationCoordinator authorization,
+    IFreeboxDataRepository dataRepository,
+    IFreeboxAuthenticationRepository authenticationRepository,
     IFreeboxCredentialStore credentialStore,
     IOptions<FreeboxCoreOptions> options) : IFreeboxOrchestrator
 {
@@ -12,15 +12,19 @@ public sealed class FreeboxOrchestrator(
     private readonly string _applicationId = options?.Value.ApplicationId
                                              ?? throw new ArgumentNullException(nameof(options));
 
-    private readonly IFreeboxAuthorizationCoordinator _authorization =
-        authorization ?? throw new ArgumentNullException(nameof(authorization));
-
-    private readonly IFreeboxClient _client = client ?? throw new ArgumentNullException(nameof(client));
+    private readonly IFreeboxAuthenticationRepository _authenticationRepository =
+        authenticationRepository ?? throw new ArgumentNullException(nameof(authenticationRepository));
 
     private readonly string _credentialProfile = options.Value.CredentialProfile;
 
     private readonly IFreeboxCredentialStore _credentialStore =
         credentialStore ?? throw new ArgumentNullException(nameof(credentialStore));
+
+    private readonly IFreeboxDataRepository _dataRepository =
+        dataRepository ?? throw new ArgumentNullException(nameof(dataRepository));
+
+    private readonly TimeSpan _defaultPairingPollInterval = options.Value.PairingPollInterval;
+    private readonly TimeSpan _defaultPairingWaitTimeout = options.Value.PairingWaitTimeout;
 
     public async ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginPairingAsync(
         CancellationToken cancellationToken = default)
@@ -41,7 +45,7 @@ public sealed class FreeboxOrchestrator(
         try
         {
             FreeboxApprovalRegistration registration =
-                await _authorization.BeginPairingAsync(cancellationToken).ConfigureAwait(false);
+                await _authenticationRepository.BeginPairingAsync(cancellationToken).ConfigureAwait(false);
 
             return FreeboxCoreResults.Success(new FreeboxPairingResult(Map(registration.Status)));
         }
@@ -57,6 +61,7 @@ public sealed class FreeboxOrchestrator(
 
     public async ValueTask<FreeboxCoreResult<FreeboxCredentialResult>> WaitForApprovalAsync(
         TimeSpan? pollInterval = null,
+        TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -65,13 +70,37 @@ public sealed class FreeboxOrchestrator(
             return CredentialStoreUnavailable<FreeboxCredentialResult>();
         }
 
+        TimeSpan effectivePollInterval = pollInterval ?? _defaultPairingPollInterval;
+        TimeSpan effectiveTimeout = timeout ?? _defaultPairingWaitTimeout;
+        if (effectivePollInterval <= TimeSpan.Zero)
+        {
+            return FreeboxCoreResults.Failure<FreeboxCredentialResult>(FreeboxErrorMapper.Map(
+                new ArgumentOutOfRangeException(nameof(pollInterval), "pollInterval must be strictly positive.")));
+        }
+
+        if (effectiveTimeout <= TimeSpan.Zero)
+        {
+            return FreeboxCoreResults.Failure<FreeboxCredentialResult>(FreeboxErrorMapper.Map(
+                new ArgumentOutOfRangeException(nameof(timeout), "timeout must be strictly positive.")));
+        }
+
+        using var timeoutCts = new CancellationTokenSource(effectiveTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            timeoutCts.Token);
+
         try
         {
-            FreeboxAppCredentials credentials = await _authorization
-                .WaitForApprovalAsync(pollInterval, cancellationToken)
+            FreeboxAppCredentials credentials = await _authenticationRepository
+                .WaitForApprovalAsync(effectivePollInterval, linkedCts.Token)
                 .ConfigureAwait(false);
 
             return FreeboxCoreResults.Success(Map(credentials));
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested &&
+                                                 !cancellationToken.IsCancellationRequested)
+        {
+            return FreeboxCoreResults.Success(new FreeboxCredentialResult(FreeboxCredentialState.Expired));
         }
         catch (OperationCanceledException)
         {
@@ -142,7 +171,7 @@ public sealed class FreeboxOrchestrator(
 
         try
         {
-            await _authorization.ForgetAsync(cancellationToken).ConfigureAwait(false);
+            await _authenticationRepository.ForgetAsync(cancellationToken).ConfigureAwait(false);
             return FreeboxCoreResults.Success(true);
         }
         catch (OperationCanceledException)
@@ -161,7 +190,7 @@ public sealed class FreeboxOrchestrator(
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            ApiVersionResponse response = await _client.Discovery
+            ApiVersionResponse response = await _dataRepository
                 .GetApiVersionAsync(cancellationToken).ConfigureAwait(false);
             return FreeboxCoreResults.Success(new FreeboxDiscoverySnapshot(
                 response.BoxModelName ?? response.BoxModel,
@@ -187,16 +216,19 @@ public sealed class FreeboxOrchestrator(
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            Task<ConnectionStatus> connectionTask = _client.Network.Connection.GetStatusAsync(cancellationToken);
+            Task<ConnectionStatus> connectionTask =
+                _dataRepository.GetConnectionStatusAsync(cancellationToken).AsTask();
             Task<ConnectionConfiguration> connectionConfigurationTask =
-                _client.Network.Connection.GetConfigurationAsync(cancellationToken);
-            Task<LanConfig> lanConfigurationTask = _client.Network.Lan.GetConfigurationAsync(cancellationToken);
-            Task<LanBrowserInterface[]> interfacesTask = _client.Network.Lan.GetInterfacesAsync(cancellationToken);
+                _dataRepository.GetConnectionConfigurationAsync(cancellationToken).AsTask();
+            Task<LanConfig> lanConfigurationTask = _dataRepository.GetLanConfigurationAsync(cancellationToken).AsTask();
+            Task<LanBrowserInterface[]> interfacesTask =
+                _dataRepository.GetLanInterfacesAsync(cancellationToken).AsTask();
             Task<WifiGlobalConfig> wifiConfigurationTask =
-                _client.Network.Wifi.GetConfigurationAsync(cancellationToken);
-            Task<ObjectOrArray<WifiGlobalState>> wifiStateTask = _client.Network.Wifi.GetStateAsync(cancellationToken);
-            Task<WifiAp[]> accessPointsTask = _client.Network.Wifi.GetAccessPointsAsync(cancellationToken);
-            Task<WifiBss[]> networksTask = _client.Network.Wifi.GetBssListAsync(cancellationToken);
+                _dataRepository.GetWifiConfigurationAsync(cancellationToken).AsTask();
+            Task<ObjectOrArray<WifiGlobalState>> wifiStateTask =
+                _dataRepository.GetWifiStateAsync(cancellationToken).AsTask();
+            Task<WifiAp[]> accessPointsTask = _dataRepository.GetWifiAccessPointsAsync(cancellationToken).AsTask();
+            Task<WifiBss[]> networksTask = _dataRepository.GetWifiBssListAsync(cancellationToken).AsTask();
 
             await Task.WhenAll(connectionTask, connectionConfigurationTask, lanConfigurationTask, interfacesTask,
                 wifiConfigurationTask, wifiStateTask, accessPointsTask, networksTask).ConfigureAwait(false);
@@ -218,8 +250,8 @@ public sealed class FreeboxOrchestrator(
                 {
                     if (!string.IsNullOrWhiteSpace(item.Name))
                     {
-                        hosts[item.Name] = await _client.Network.Lan.Interface(item.Name)
-                            .GetHostsAsync(cancellationToken).ConfigureAwait(false);
+                        hosts[item.Name] = await _dataRepository.GetLanHostsAsync(item.Name, cancellationToken)
+                            .ConfigureAwait(false);
                     }
                 }
             }
@@ -257,15 +289,17 @@ public sealed class FreeboxOrchestrator(
                     lanConfiguration.Name,
                     lanConfiguration.Type,
                     lanConfiguration.Mode,
-                    interfaces.Select(item => new FreeboxLanInterfaceSnapshot(item.Name, item.HostCount)).ToArray(),
+                    [.. interfaces.Select(item => new FreeboxLanInterfaceSnapshot(item.Name, item.HostCount))],
                     mappedHosts),
                 new FreeboxWifiSnapshot(
                     wifiConfiguration.Enabled,
                     wifiConfiguration.MacFilterState,
                     MapWifiState(wifiState),
-                    accessPoints.Select(item => new FreeboxWifiAccessPointSnapshot(
-                        item.Id, item.Status?.State)).ToArray(),
-                    networks.Select(MapWifiBss).ToArray())));
+                    [
+                        .. accessPoints.Select(item => new FreeboxWifiAccessPointSnapshot(
+                            item.Id, item.Status?.State))
+                    ],
+                    [.. networks.Select(MapWifiBss)])));
         }
         catch (OperationCanceledException)
         {
@@ -283,8 +317,8 @@ public sealed class FreeboxOrchestrator(
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            SystemConfig configuration = await _client.SystemHome.System
-                .GetAsync(cancellationToken).ConfigureAwait(false);
+            SystemConfig configuration = await _dataRepository
+                .GetSystemConfigurationAsync(cancellationToken).ConfigureAwait(false);
             return FreeboxCoreResults.Success(new FreeboxSystemSnapshot(
                 configuration.FirmwareVersion,
                 configuration.ModelInfo?.PrettyName ?? configuration.ModelInfo?.Name,
@@ -313,7 +347,7 @@ public sealed class FreeboxOrchestrator(
 
     private async ValueTask<FreeboxCredentialId> GetCredentialIdAsync(CancellationToken cancellationToken)
     {
-        ApiVersionResponse apiVersion = await _client.Discovery.GetApiVersionAsync(cancellationToken)
+        ApiVersionResponse apiVersion = await _dataRepository.GetApiVersionAsync(cancellationToken)
             .ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(apiVersion.Uid))
         {

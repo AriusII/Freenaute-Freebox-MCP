@@ -34,11 +34,11 @@ public sealed class LinuxSecretServiceCredentialStorageTests
 
         // The secret-tool process cannot start: every operation must throw instead of
         // silently succeeding or falling back to plaintext.
-        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
             await storage.GetAsync(id, TestContext.Current.CancellationToken));
-        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
             await storage.PutAsync(id, credentials, TestContext.Current.CancellationToken));
-        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
             await storage.DeleteAsync(id, TestContext.Current.CancellationToken));
     }
 

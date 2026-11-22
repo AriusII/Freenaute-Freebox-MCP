@@ -152,22 +152,33 @@ internal sealed class LinuxSecretServiceCredentialStorage : IFreeboxCredentialSt
             startInfo.ArgumentList.Add(argument);
         }
 
-        using Process process = Process.Start(startInfo) ?? throw new NotSupportedException(
-            "The 'secret-tool' binary could not be started; failing closed instead of using plaintext storage.");
-
-        Task<string> standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-        Task<byte[]> standardOutput = ReadAllBytesAsync(process.StandardOutput.BaseStream, cancellationToken);
-
-        if (stdinPayload is not null)
+        Process process;
+        try
         {
-            await process.StandardInput.BaseStream.WriteAsync(stdinPayload, cancellationToken).ConfigureAwait(false);
+            process = Process.Start(startInfo) ?? throw CreateBackendException("start");
+        }
+        catch (Exception exception) when (exception is Win32Exception or FileNotFoundException)
+        {
+            throw CreateBackendException("start");
         }
 
-        process.StandardInput.Close();
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        using (process)
+        {
+            Task<string> standardError = process.StandardError.ReadToEndAsync(cancellationToken);
+            Task<byte[]> standardOutput = ReadAllBytesAsync(process.StandardOutput.BaseStream, cancellationToken);
 
-        return (process.ExitCode, await standardOutput.ConfigureAwait(false),
-            await standardError.ConfigureAwait(false));
+            if (stdinPayload is not null)
+            {
+                await process.StandardInput.BaseStream.WriteAsync(stdinPayload, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            process.StandardInput.Close();
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+            return (process.ExitCode, await standardOutput.ConfigureAwait(false),
+                await standardError.ConfigureAwait(false));
+        }
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken cancellationToken)

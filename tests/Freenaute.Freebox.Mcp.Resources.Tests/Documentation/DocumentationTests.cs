@@ -6,8 +6,14 @@ public sealed class DocumentationTests
     [
         "freebox://docs/en/overview",
         "freebox://docs/en/resources",
+        "freebox://docs/en/quickstart",
+        "freebox://docs/en/auth-pairing",
+        "freebox://docs/en/tool-families",
         "freebox://docs/fr/overview",
-        "freebox://docs/fr/resources"
+        "freebox://docs/fr/resources",
+        "freebox://docs/fr/quickstart",
+        "freebox://docs/fr/authentification-appairage",
+        "freebox://docs/fr/tool-families"
     ];
 
     [Theory]
@@ -38,14 +44,83 @@ public sealed class DocumentationTests
     }
 
     [Theory]
+    [InlineData("freebox://docs/en/overview", "Discovery")]
+    [InlineData("freebox://docs/en/overview", "Pairing")]
+    [InlineData("freebox://docs/en/overview", "Network")]
+    [InlineData("freebox://docs/en/overview", "System")]
+    [InlineData("freebox://docs/en/resources", "## Tool families")]
+    [InlineData("freebox://docs/en/resources", "freebox_pairing_wait")]
+    [InlineData("freebox://docs/en/resources", "includeHosts")]
+    [InlineData("freebox://docs/en/quickstart", "Tool-family routing")]
+    [InlineData("freebox://docs/en/quickstart", "pollIntervalSeconds")]
+    [InlineData("freebox://docs/en/auth-pairing", "Safe operating sequence")]
+    [InlineData("freebox://docs/en/auth-pairing", "physical confirmation")]
+    [InlineData("freebox://docs/en/tool-families", "Downloads family")]
+    [InlineData("freebox://docs/en/tool-families", "Calls family")]
+    [InlineData("freebox://docs/en/tool-families", "Contacts family")]
+    [InlineData("freebox://docs/en/tool-families", "Cameras family")]
+    [InlineData("freebox://docs/en/tool-families", "Notifications family")]
+    [InlineData("freebox://docs/en/tool-families", "AirMedia family")]
+    [InlineData("freebox://docs/en/tool-families", "Shares family")]
+    [InlineData("freebox://docs/en/tool-families", "Parental controls family")]
+    [InlineData("freebox://docs/fr/tool-families", "Famille Téléchargements")]
+    [InlineData("freebox://docs/fr/tool-families", "Famille AirMedia")]
+    [InlineData("freebox://docs/fr/tool-families", "Famille Contrôle parental")]
+    public void TryGet_EnglishDocumentation_ContainsToolFamilyGuidance(string uri, string expectedText)
+    {
+        Assert.True(DocumentationStore.TryGet(uri, out string markdown));
+        Assert.Contains(expectedText, markdown, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Découverte", "freebox_discover")]
+    [InlineData("Appairage", "freebox_pairing_wait")]
+    [InlineData("Réseau", "freebox_wifi_status")]
+    [InlineData("Système", "freebox_system_status")]
+    public void FrenchOverview_CoversToolFamilyAndTool(string heading, string toolName)
+    {
+        Assert.True(DocumentationStore.TryGet("freebox://docs/fr/overview", out string markdown));
+        Assert.Contains(heading, markdown, StringComparison.Ordinal);
+        Assert.Contains(toolName, markdown, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Téléchargements", "freebox_downloads_list")]
+    [InlineData("Appels téléphoniques", "freebox_calls_clear_log")]
+    [InlineData("Contacts", "freebox_contacts_search")]
+    [InlineData("Caméras et domicile", "freebox_cameras_overview")]
+    [InlineData("Notifications et flux", "freebox_notifications_feed")]
+    [InlineData("AirMedia", "freebox_airmedia_receivers")]
+    [InlineData("Contrôle parental", "freebox_parental_filters")]
+    [InlineData("NAS et partages", "freebox_shares_visibility")]
+    public void FrenchResources_CoversAllAdditionalToolFamilies(string heading, string toolName)
+    {
+        Assert.True(DocumentationStore.TryGet("freebox://docs/fr/resources", out string markdown));
+        Assert.Contains(heading, markdown, StringComparison.Ordinal);
+        Assert.Contains(toolName, markdown, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(nameof(DocumentationResources.EnglishOverview), "freebox://docs/en/overview",
         "freebox-docs-en-overview", "Freebox MCP overview (English)")]
     [InlineData(nameof(DocumentationResources.EnglishResourceCatalog), "freebox://docs/en/resources",
         "freebox-docs-en-resources", "Freebox resource catalog (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishQuickstart), "freebox://docs/en/quickstart",
+        "freebox-docs-en-quickstart", "Freebox MCP quickstart (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishAuthPairing), "freebox://docs/en/auth-pairing",
+        "freebox-docs-en-auth-pairing", "Freebox authentication and pairing (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishToolFamilies), "freebox://docs/en/tool-families",
+        "freebox-docs-en-tool-families", "Freebox MCP tool-family guide (English)")]
     [InlineData(nameof(DocumentationResources.FrenchOverview), "freebox://docs/fr/overview", "freebox-docs-fr-overview",
         "Présentation MCP Freebox (français)")]
     [InlineData(nameof(DocumentationResources.FrenchResourceCatalog), "freebox://docs/fr/resources",
         "freebox-docs-fr-resources", "Catalogue des ressources Freebox (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchQuickstart), "freebox://docs/fr/quickstart",
+        "freebox-docs-fr-quickstart", "Démarrage rapide MCP Freebox (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchAuthPairing), "freebox://docs/fr/authentification-appairage",
+        "freebox-docs-fr-authentification-appairage", "Authentification et appairage Freebox (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchToolFamilies), "freebox://docs/fr/tool-families",
+        "freebox-docs-fr-tool-families", "Guide des familles d'outils MCP Freebox (français)")]
     public void DocumentationMethod_ReturnsContentMatchingMetadata(string methodName, string uri, string name,
         string title)
     {

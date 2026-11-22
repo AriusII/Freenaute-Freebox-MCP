@@ -53,18 +53,22 @@ public sealed class FreeboxNetworkTools(IFreeboxOrchestrator orchestrator)
         }
 
         FreeboxLanSnapshot value = result.Value!.Lan;
-        LanInterfaceToolResult[] summaries = value.Interfaces
-            .Where(item => interfaceName is null || string.Equals(item.Name, interfaceName, StringComparison.Ordinal))
-            .Take(MaxInterfaces)
-            .Select(item =>
-            {
-                string name = item.Name is null ? string.Empty : Safe.Text(item.Name, 64);
-                LanHostToolResult[]? hosts = includeHosts && value.Hosts.TryGetValue(
-                    item.Name ?? string.Empty, out FreeboxLanHostSnapshot[]? raw)
-                    ? raw.Take(MaxHostsPerInterface).Select(MapHost).ToArray()
-                    : null;
-                return new LanInterfaceToolResult(name, item.HostCount, hosts);
-            }).ToArray();
+        LanInterfaceToolResult[] summaries =
+        [
+            .. value.Interfaces
+                .Where(item =>
+                    interfaceName is null || string.Equals(item.Name, interfaceName, StringComparison.Ordinal))
+                .Take(MaxInterfaces)
+                .Select(item =>
+                {
+                    string name = item.Name is null ? string.Empty : Safe.Text(item.Name, 64);
+                    LanHostToolResult[]? hosts = includeHosts && value.Hosts.TryGetValue(
+                        item.Name ?? string.Empty, out FreeboxLanHostSnapshot[]? raw)
+                        ? [.. raw.Take(MaxHostsPerInterface).Select(MapHost)]
+                        : null;
+                    return new LanInterfaceToolResult(name, item.HostCount, hosts);
+                })
+        ];
 
         return new LanToolResult(Safe.Text(value.Name, 64), Safe.Text(value.Type, 32), Safe.Text(value.Mode, 32),
             summaries);
@@ -84,9 +88,11 @@ public sealed class FreeboxNetworkTools(IFreeboxOrchestrator orchestrator)
 
         FreeboxWifiSnapshot value = result.Value!.Wifi;
         return new WifiToolResult(value.Enabled, Safe.Text(value.MacFilterState, 32), Safe.Text(value.State, 32),
-            value.AccessPoints.Take(MaxAccessPoints).Select(item =>
-                new WifiAccessPointToolResult(item.Id, string.Empty, Safe.Text(item.State, 32))).ToArray(),
-            value.Networks.Take(MaxBss).Select(MapBss).ToArray());
+            [
+                .. value.AccessPoints.Take(MaxAccessPoints).Select(item =>
+                    new WifiAccessPointToolResult(item.Id, string.Empty, Safe.Text(item.State, 32)))
+            ],
+            [.. value.Networks.Take(MaxBss).Select(MapBss)]);
     }
 
     private static LanHostToolResult MapHost(FreeboxLanHostSnapshot host)

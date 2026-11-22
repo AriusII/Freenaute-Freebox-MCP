@@ -223,7 +223,7 @@ jobs:
           done
 
   containers-linux:
-    name: Container image (linux amd64/arm64)
+    name: Container images (linux x64/arm64 + manifest)
     needs: validate
     runs-on: ubuntu-latest
     permissions:
@@ -249,6 +249,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -256,16 +259,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push multi-arch image
+      - name: Build and push linux x64
         shell: bash
         run: |
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            -f containers/Dockerfile \
+            --platform linux/amd64 \
+            -f containers/linux/x64/Dockerfile \
             --build-arg VERSION=${{ steps.version.outputs.VERSION }} \
+            -t ${{ env.GHCR_IMAGE }}:linux-amd64 \
+            --push .
+
+      - name: Build and push linux arm64
+        shell: bash
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -f containers/linux/arm/Dockerfile \
+            --build-arg VERSION=${{ steps.version.outputs.VERSION }} \
+            -t ${{ env.GHCR_IMAGE }}:linux-arm64 \
+            --push .
+
+      - name: Create and push linux multi-arch manifests
+        shell: bash
+        run: |
+          docker buildx imagetools create \
             -t ${{ env.GHCR_IMAGE }}:${{ steps.version.outputs.VERSION }} \
             -t ${{ env.GHCR_IMAGE }}:latest \
-            --push .
+            ${{ env.GHCR_IMAGE }}:linux-amd64 \
+            ${{ env.GHCR_IMAGE }}:linux-arm64
 
   containers-windows-x64:
     name: Container image (windows amd64)
@@ -298,12 +319,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Windows container (amd64)
         shell: pwsh
         run: |
-          docker build -f containers/windows/Dockerfile `
+          docker buildx build --platform windows/amd64 -f containers/windows/x64/Dockerfile `
             --build-arg VERSION=${{ steps.version.outputs.VERSION }} `
-            --build-arg ARCH=amd64 `
             -t ${{ env.GHCR_IMAGE }}:windows-amd64 `
             --push .
 
@@ -338,12 +361,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Windows container (arm64)
         shell: pwsh
         run: |
-          docker build -f containers/windows/Dockerfile `
+          docker buildx build --platform windows/arm64 -f containers/windows/arm/Dockerfile `
             --build-arg VERSION=${{ steps.version.outputs.VERSION }} `
-            --build-arg ARCH=arm64 `
             -t ${{ env.GHCR_IMAGE }}:windows-arm64 `
             --push .
 

@@ -10,20 +10,73 @@ read-only status** of the Freebox and its LAN/Wi-Fi. It cannot change Freebox co
 - .NET 11, Native AOT single-file; also distributed as a NuGet tool (`Freenaute.Freebox.Mcp`) runnable with `dnx`
   or `freenaute-freebox-mcp`.
 - Server identity: `Freenaute.Freebox.Mcp` (version `0.1.0-beta`); package name in `.mcp/server.json`:
-  `io.github.freenaute/freenaute-freebox-mcp`.
+  `org.freenaute/freenaute-freebox-mcp`.
 
 ## Capabilities
 
-8 tools (see `freebox://docs/en/resources` for details and examples):
+The server exposes 31 tools across operational families (see `freebox://docs/en/resources` for routing, limits,
+and examples):
 
-- `freebox_discover` — reachable Freebox + API capability metadata (read-only).
-- `freebox_pairing_status` — credential state, never secrets (read-only).
-- `freebox_pairing_initiate` — start pairing; **gated** behind `FREEBOX_ALLOW_PAIRING_INITIATION=1|true|TRUE`.
-- `freebox_pairing_wait` — wait for approval of an existing pairing; cancellable.
-- `freebox_connection_status`, `freebox_lan_overview`, `freebox_wifi_status`, `freebox_system_status` — read-only,
-  sanitized status.
+### Discovery
 
-5 resources: this documentation (`freebox://docs/en/*`, `freebox://docs/fr/*`) and `freebox://live/status`.
+- `freebox_discover` — verifies reachability and returns bounded, non-identifying API capability metadata.
+
+### Pairing
+
+- `freebox_pairing_status` — reports credential state without exposing secrets.
+- `freebox_pairing_initiate` — starts pairing only behind
+  `FREEBOX_ALLOW_PAIRING_INITIATION=1|true|TRUE`; physical approval is still mandatory.
+- `freebox_pairing_wait` — polls an existing pairing for approval; cancellable and resumable, with optional polling
+  interval and timeout.
+
+### Network
+
+- `freebox_connection_status` — connection state, media, rates, counters, and remote-access flags.
+- `freebox_lan_overview` — bounded interface summaries; hosts are optional and identifiers are hashed.
+- `freebox_wifi_status` — bounded Wi-Fi and network state; SSIDs and BSSIDs are excluded.
+
+### System
+
+- `freebox_system_status` — firmware, model, uptime, disk health, sensors, fans, and expansion status.
+
+### Downloads
+
+- List, status, aggregate statistics, configuration, files, log, and piece state; all read-only. Task IDs are required
+  for detail tools.
+
+### Calls
+
+- Read the bounded call log/account and optionally mark all entries read or clear the destructive call log.
+
+### Contacts
+
+- List or search bounded safe contact summaries. Raw names, numbers, and addresses are not exposed.
+
+### Cameras
+
+- Read bounded camera summaries and home language, standby planning, and update state. No streams or controls.
+
+### Notifications
+
+- Read bounded status and derived notification feeds. The MCP tools do not acknowledge or mutate notifications.
+
+### AirMedia
+
+- Read bounded AirMedia state and receiver capabilities. No casting or playback control is exposed.
+
+### Shares
+
+- Read NAS and LAN-share visibility. No share paths, credentials, or host identities are exposed.
+
+### Parental controls
+
+- Read default policy mode and bounded sanitized filter state. No filter targets or mutation operations are exposed.
+
+Discovery, network, and system tools are read-only. Pairing status is also read-only; pairing initiation is explicitly
+gated and pairing wait is a long-running approval operation.
+
+Resources: embedded English/French documentation (`freebox://docs/en/*`, `freebox://docs/fr/*`) and the live
+`freebox://live/status` resource.
 
 ## Pairing workflow (important)
 
@@ -34,9 +87,10 @@ read-only status** of the Freebox and its LAN/Wi-Fi. It cannot change Freebox co
    bypassed by any tool or setting.
 4. Call `freebox_pairing_wait` to poll until the state becomes `Approved` (or `Denied` / `Expired`). It is safe to
    cancel and resume.
-5. Once `Approved`, the read-only status tools work. The durable app token is stored **encrypted in the OS
-   credential vault** (Windows Credential Manager / macOS Keychain); on Linux/containers there is **no storage** and
-   pairing fails closed. The session token lives in memory only (`X-Fbx-App-Auth` header).
+5. Once `Approved`, the read-only status tools work. The durable app token is stored in the OS credential vault (Windows
+   Credential Manager / Linux Secret Service via `secret-tool` / macOS Keychain). Containers or other
+   headless hosts may use the encrypted file backend when configured. If no secure storage is available, pairing
+   fails closed. The session token lives in memory only (`X-Fbx-App-Auth` header).
 
 Under the hood: `POST /api/v*/login/authorize/` → `app_token` + `track_id`; poll
 `GET /api/v*/login/authorize/{track_id}` (`pending|granted|denied|timeout`); then `GET /api/v*/login/` → `challenge`;
@@ -44,14 +98,15 @@ Under the hood: `POST /api/v*/login/authorize/` → `app_token` + `track_id`; po
 
 ## Safety rules (always apply)
 
-- **Read-only posture**: the 6 status/discovery tools never mutate the Freebox. Only the two pairing tools are
-  non-read-only, and `freebox_pairing_initiate` is policy-gated.
+- **Read-only posture**: discovery, network, system, downloads, calls, contacts, cameras, notifications, AirMedia,
+  shares, and parental read tools never mutate the Freebox. Pairing initiation/wait and call-log mutations are the
+  explicitly non-read-only operations; pairing initiation is policy-gated and call-log clear is destructive.
 - **Sanitized outputs**: tool results and `freebox://live/status` never contain hostnames, domains, IP or MAC
   addresses, SSIDs, BSSIDs, tokens, or challenges. Host/sensor/BSS identifiers are SHA-256 hex digests. Strings are
   stripped of control characters and length-capped; collections are capped (32 interfaces, 128 hosts/interface,
   32 access points, 128 BSS, 32 system components); resource contents are truncated at 64 KiB.
 - **Secrets**: never ask the user to paste a token into chat, and never put a token in an argument, env var, config
-  file, or log. Use `freenaute-freebox-mcp import-token --freebox-uid <uid>` which reads the token from stdin only.
+  file, or log. The server accepts no command-line arguments; credentials are obtained through the MCP pairing flow.
 - **Errors** come back as structured errors with stable codes: `AuthenticationRequired`, `AuthorizationPending`,
   `AuthorizationDenied`, `AuthorizationExpired`, `ApiRejected`, `TransportFailure`, `CredentialStoreUnavailable`,
   `Cancelled`, `InvalidRequest`. Messages are redacted.
@@ -67,10 +122,13 @@ Under the hood: `POST /api/v*/login/authorize/` → `app_token` + `track_id`; po
 
 ## Configuration (environment variables)
 
-| Variable                           | Default                           | Purpose                                                |
-|------------------------------------|-----------------------------------|--------------------------------------------------------|
-| `FREEBOX_APPLICATION_ID`           | `io.github.freenaute.freebox-mcp` | Freebox application id.                                |
-| `FREEBOX_APPLICATION_NAME`         | `Freenaute Freebox MCP`           | Name shown during pairing.                             |
-| `FREEBOX_DEVICE_NAME`              | machine name                      | Device name shown during pairing.                      |
-| `FREEBOX_CREDENTIAL_PROFILE`       | `default`                         | Credential profile (scoping).                          |
-| `FREEBOX_ALLOW_PAIRING_INITIATION` | unset = disabled                  | `1`/`true`/`TRUE` to allow `freebox_pairing_initiate`. |
+| Variable                                | Default                     | Purpose                                                |
+|-----------------------------------------|-----------------------------|--------------------------------------------------------|
+| `FREEBOX_APPLICATION_ID`                | `org.freenaute.freebox-mcp` | Freebox application id.                                |
+| `FREEBOX_APPLICATION_NAME`              | `Freenaute Freebox MCP`     | Name shown during pairing.                             |
+| `FREEBOX_DEVICE_NAME`                   | machine name                | Device name shown during pairing.                      |
+| `FREEBOX_CREDENTIAL_PROFILE`            | `default`                   | Credential profile (scoping).                          |
+| `FREEBOX_ALLOW_PAIRING_INITIATION`      | unset = disabled            | `1`/`true`/`TRUE` to allow `freebox_pairing_initiate`. |
+| `FREEBOX_PAIRING_POLL_INTERVAL_SECONDS` | `2`                         | Default pairing poll interval; must be `> 0`.          |
+| `FREEBOX_PAIRING_WAIT_TIMEOUT_SECONDS`  | `600`                       | Default pairing wait timeout; must be `> 0`.           |
+| `FREEBOX_AUTHENTICATE_ON_STARTUP`       | `true`                      | Reuse stored credentials and bootstrap authentication. |

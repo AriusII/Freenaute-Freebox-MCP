@@ -2,19 +2,23 @@ namespace Freenaute.Freebox.Mcp.Security;
 
 /// <summary>
 ///     AES-256-GCM encrypted credential file storage for container/headless deployments, selected when
-///     <c>FREEBOX_CREDENTIAL_FILE</c> is set. The encryption key is the SHA-256 of the passphrase read
-///     from the file pointed to by <c>FREEBOX_CREDENTIAL_PASSPHRASE_FILE</c>. The stored blob is
-///     magic || nonce(12) || tag(16) || ciphertext, where the plaintext is the versioned source-generated
-///     JSON credential payload. Writes are verified by reading the file back and comparing with a
-///     constant-time comparison.
+///     <c>FREEBOX_CREDENTIAL_FILE</c> is set. The encryption key is derived with PBKDF2-SHA256 from the
+///     passphrase read from <c>FREEBOX_CREDENTIAL_PASSPHRASE_FILE</c> and a per-file random salt.
+///     The stored blob is <c>FBMCP2 || salt(16) || nonce(12) || tag(16) || ciphertext</c>.
+///     Legacy <c>FBMCP1</c> files (without salt) can still be decrypted for migration.
+///     Writes are verified by reading the file back and comparing with a constant-time comparison.
 /// </summary>
 internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage, IDisposable
 {
+    private const int AesKeySizeBytes = 32;
     private const int NonceSizeBytes = 12;
     private const int TagSizeBytes = 16;
+    private const int SaltSizeBytes = 16;
+    private const int Pbkdf2Iterations = 210_000;
 
     private readonly string _filePath;
-    private readonly byte[] _key;
+    private readonly byte[] _legacyKey;
+    private readonly byte[] _passphrase;
 
     public EncryptedFileCredentialStorage()
     {
@@ -49,7 +53,8 @@ internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage
                 throw new InvalidOperationException("The passphrase file is empty.");
             }
 
-            _key = SHA256.HashData(passphrase.AsSpan(0, length));
+            _passphrase = passphrase.AsSpan(0, length).ToArray();
+            _legacyKey = SHA256.HashData(_passphrase);
         }
         finally
         {
@@ -57,11 +62,13 @@ internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage
         }
     }
 
-    private static ReadOnlySpan<byte> Magic => "FBMCP1"u8;
+    private static ReadOnlySpan<byte> MagicV1 => "FBMCP1"u8;
+    private static ReadOnlySpan<byte> MagicV2 => "FBMCP2"u8;
 
     public void Dispose()
     {
-        CryptographicOperations.ZeroMemory(_key);
+        CryptographicOperations.ZeroMemory(_passphrase);
+        CryptographicOperations.ZeroMemory(_legacyKey);
         GC.SuppressFinalize(this);
     }
 
@@ -167,23 +174,33 @@ internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage
 
     private byte[] Encrypt(byte[] plaintext)
     {
+        byte[] salt = RandomNumberGenerator.GetBytes(SaltSizeBytes);
         byte[] nonce = RandomNumberGenerator.GetBytes(NonceSizeBytes);
         byte[] tag = new byte[TagSizeBytes];
         byte[] ciphertext = new byte[plaintext.Length];
+        byte[] key = DeriveKey(salt);
         try
         {
-            using var aes = new AesGcm(_key, TagSizeBytes);
+            using var aes = new AesGcm(key, TagSizeBytes);
             aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-            byte[] blob = new byte[Magic.Length + NonceSizeBytes + TagSizeBytes + ciphertext.Length];
-            Magic.CopyTo(blob);
-            nonce.CopyTo(blob, Magic.Length);
-            tag.CopyTo(blob, Magic.Length + NonceSizeBytes);
-            ciphertext.CopyTo(blob, Magic.Length + NonceSizeBytes + TagSizeBytes);
+            int offset = 0;
+            byte[] blob = new byte[MagicV2.Length + SaltSizeBytes + NonceSizeBytes + TagSizeBytes + ciphertext.Length];
+            MagicV2.CopyTo(blob);
+            offset += MagicV2.Length;
+            salt.CopyTo(blob, offset);
+            offset += SaltSizeBytes;
+            nonce.CopyTo(blob, offset);
+            offset += NonceSizeBytes;
+            tag.CopyTo(blob, offset);
+            offset += TagSizeBytes;
+            ciphertext.CopyTo(blob, offset);
             return blob;
         }
         finally
         {
+            CryptographicOperations.ZeroMemory(key);
+            CryptographicOperations.ZeroMemory(salt);
             CryptographicOperations.ZeroMemory(nonce);
             CryptographicOperations.ZeroMemory(tag);
             CryptographicOperations.ZeroMemory(ciphertext);
@@ -192,20 +209,38 @@ internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage
 
     private byte[] Decrypt(byte[] blob)
     {
-        int headerSize = Magic.Length + NonceSizeBytes + TagSizeBytes;
-        if (blob.Length <= headerSize || !blob.AsSpan(0, Magic.Length).SequenceEqual(Magic))
+        if (blob.AsSpan(0, Math.Min(MagicV2.Length, blob.Length)).SequenceEqual(MagicV2))
+        {
+            return DecryptV2(blob);
+        }
+
+        if (blob.AsSpan(0, Math.Min(MagicV1.Length, blob.Length)).SequenceEqual(MagicV1))
+        {
+            return DecryptV1(blob);
+        }
+
+        throw new InvalidDataException("The encrypted credential file is missing or has an invalid header.");
+    }
+
+    private byte[] DecryptV2(byte[] blob)
+    {
+        int headerSize = MagicV2.Length + SaltSizeBytes + NonceSizeBytes + TagSizeBytes;
+        if (blob.Length <= headerSize)
         {
             throw new InvalidDataException("The encrypted credential file is missing or has an invalid header.");
         }
 
+        byte[] key = DeriveKey(blob.AsSpan(MagicV2.Length, SaltSizeBytes));
         byte[] plaintext = new byte[blob.Length - headerSize];
         try
         {
-            using var aes = new AesGcm(_key, TagSizeBytes);
+            int nonceOffset = MagicV2.Length + SaltSizeBytes;
+            int tagOffset = nonceOffset + NonceSizeBytes;
+            using var aes = new AesGcm(key, TagSizeBytes);
             aes.Decrypt(
-                blob.AsSpan(Magic.Length, NonceSizeBytes),
+                blob.AsSpan(nonceOffset, NonceSizeBytes),
                 blob.AsSpan(headerSize),
-                blob.AsSpan(Magic.Length + NonceSizeBytes, TagSizeBytes),
+                blob.AsSpan(tagOffset, TagSizeBytes),
                 plaintext);
             return plaintext;
         }
@@ -216,5 +251,44 @@ internal sealed class EncryptedFileCredentialStorage : IFreeboxCredentialStorage
                 "The encrypted credential file could not be decrypted (wrong passphrase or tampered file).",
                 exception);
         }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+    }
+
+    private byte[] DecryptV1(byte[] blob)
+    {
+        int headerSize = MagicV1.Length + NonceSizeBytes + TagSizeBytes;
+        if (blob.Length <= headerSize)
+        {
+            throw new InvalidDataException("The encrypted credential file is missing or has an invalid header.");
+        }
+
+        byte[] plaintext = new byte[blob.Length - headerSize];
+        try
+        {
+            using var aes = new AesGcm(_legacyKey, TagSizeBytes);
+            aes.Decrypt(
+                blob.AsSpan(MagicV1.Length, NonceSizeBytes),
+                blob.AsSpan(headerSize),
+                blob.AsSpan(MagicV1.Length + NonceSizeBytes, TagSizeBytes),
+                plaintext);
+            return plaintext;
+        }
+        catch (CryptographicException exception)
+        {
+            CryptographicOperations.ZeroMemory(plaintext);
+            throw new InvalidDataException(
+                "The encrypted credential file could not be decrypted (wrong passphrase or tampered file).",
+                exception);
+        }
+    }
+
+    private byte[] DeriveKey(ReadOnlySpan<byte> salt)
+    {
+        byte[] key = new byte[AesKeySizeBytes];
+        Rfc2898DeriveBytes.Pbkdf2(_passphrase, salt, key, Pbkdf2Iterations, HashAlgorithmName.SHA256);
+        return key;
     }
 }

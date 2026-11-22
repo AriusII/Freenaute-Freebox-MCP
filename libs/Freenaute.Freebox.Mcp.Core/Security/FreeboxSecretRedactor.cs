@@ -17,6 +17,11 @@ public static partial class FreeboxSecretRedactor
         RegexOptions.CultureInvariant)]
     private static partial Regex AssignmentValuePattern();
 
+    [GeneratedRegex(
+        """(?i)((?:authorization)\s*[:=]\s*["']?)[^,;\r\n"']+""",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex AuthorizationHeaderPattern();
+
     public static string Redact(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -33,6 +38,10 @@ public static partial class FreeboxSecretRedactor
             match => $"{match.Groups[1].Value}<redacted>{match.Groups[3].Value}");
 
         redacted = AssignmentValuePattern().Replace(
+            redacted,
+            match => $"{match.Groups[1].Value}<redacted>");
+
+        redacted = AuthorizationHeaderPattern().Replace(
             redacted,
             match => $"{match.Groups[1].Value}<redacted>");
 

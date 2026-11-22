@@ -12,7 +12,7 @@ public sealed class StdioProtocolTests
             """
             {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"tests","version":"1.0"}}}
             """);
-        var serverInfo = initialize.RootElement.GetProperty("result").GetProperty("serverInfo");
+        JsonElement serverInfo = initialize.RootElement.GetProperty("result").GetProperty("serverInfo");
         Assert.Equal("Freenaute.Freebox.Mcp", serverInfo.GetProperty("name").GetString());
 
         // serverInfo.version must be the version of the host build (BuildInfo.Version from MSBuild).
@@ -31,30 +31,65 @@ public sealed class StdioProtocolTests
 
         JsonDocument tools = await SendAsync(process, input,
             "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
-        string[] toolNames = tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
-            .Select(element => element.GetProperty("name").GetString()!).Order().ToArray();
+        string[] toolNames =
+        [
+            .. tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
+                .Select(element => element.GetProperty("name").GetString()!).Order()
+        ];
         Assert.Equal(
         [
+            "freebox_airmedia_receivers",
+            "freebox_airmedia_status",
+            "freebox_calls_account",
+            "freebox_calls_clear_log",
+            "freebox_calls_log",
+            "freebox_calls_mark_all_read",
+            "freebox_cameras_overview",
             "freebox_connection_status",
+            "freebox_contacts_list",
+            "freebox_contacts_search",
             "freebox_discover",
+            "freebox_download_configuration",
+            "freebox_download_files",
+            "freebox_download_log",
+            "freebox_download_pieces",
+            "freebox_download_stats",
+            "freebox_download_status",
+            "freebox_downloads_list",
+            "freebox_home_status",
             "freebox_lan_overview",
+            "freebox_nas_visibility",
+            "freebox_notifications_feed",
             "freebox_pairing_initiate",
             "freebox_pairing_status",
             "freebox_pairing_wait",
+            "freebox_parental_config",
+            "freebox_parental_filters",
+            "freebox_shares_visibility",
+            "freebox_status_feed",
             "freebox_system_status",
             "freebox_wifi_status"
         ], toolNames);
 
         JsonDocument resources = await SendAsync(process, input,
             "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/list\",\"params\":{}}");
-        string[] resourceUris = resources.RootElement.GetProperty("result").GetProperty("resources").EnumerateArray()
-            .Select(element => element.GetProperty("uri").GetString()!).Order().ToArray();
+        string[] resourceUris =
+        [
+            .. resources.RootElement.GetProperty("result").GetProperty("resources").EnumerateArray()
+                .Select(element => element.GetProperty("uri").GetString()!).Order()
+        ];
         Assert.Equal(
         [
+            "freebox://docs/en/auth-pairing",
             "freebox://docs/en/overview",
+            "freebox://docs/en/quickstart",
             "freebox://docs/en/resources",
+            "freebox://docs/en/tool-families",
+            "freebox://docs/fr/authentification-appairage",
             "freebox://docs/fr/overview",
+            "freebox://docs/fr/quickstart",
             "freebox://docs/fr/resources",
+            "freebox://docs/fr/tool-families",
             "freebox://live/status"
         ], resourceUris);
 

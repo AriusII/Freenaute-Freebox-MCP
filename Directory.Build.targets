@@ -18,20 +18,22 @@
       dotnet msbuild -t:PublishContainers     [-p:Version=...]
       dotnet msbuild mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -t:BuildMcpHost -p:Configuration=Release
 
-    Content checks use findstr (Windows) with exit codes captured via the Exec ExitCode
-    output; structured files are read with ReadLinesFromFile + regex in MSBuild.
+    Validation reads content with MSBuild and evaluates it with platform-neutral
+    expressions. Commands invoked by packaging/publishing remain platform-specific only
+    where the published artifact format requires it.
   -->
 
   <PropertyGroup>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
-    <!-- NormalizePath so findstr gets native separators on Windows (it rejects '/'). -->
     <McpCsproj>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj'))</McpCsproj>
     <McpServerJson>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/.mcp/server.json'))</McpServerJson>
     <McpProgramCs>$([MSBuild]::NormalizePath('$(RepoRoot)mcp/Freenaute.Freebox.Mcp/Program.cs'))</McpProgramCs>
     <RootProps>$([MSBuild]::NormalizePath('$(RepoRoot)Directory.Build.props'))</RootProps>
     <GlobalJson>$([MSBuild]::NormalizePath('$(RepoRoot)global.json'))</GlobalJson>
-    <LinuxDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/Dockerfile'))</LinuxDockerfile>
-    <WindowsDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/windows/Dockerfile'))</WindowsDockerfile>
+    <LinuxX64Dockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/linux/x64/Dockerfile'))</LinuxX64Dockerfile>
+    <LinuxArmDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/linux/arm/Dockerfile'))</LinuxArmDockerfile>
+    <WindowsX64Dockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/windows/x64/Dockerfile'))</WindowsX64Dockerfile>
+    <WindowsArmDockerfile>$([MSBuild]::NormalizePath('$(RepoRoot)containers/windows/arm/Dockerfile'))</WindowsArmDockerfile>
     <McpDir>$([MSBuild]::NormalizePath('$(RepoRoot)mcp'))</McpDir>
     <LibsDir>$([MSBuild]::NormalizePath('$(RepoRoot)libs'))</LibsDir>
 
@@ -95,9 +97,17 @@
     <ReadLinesFromFile File="$(McpServerJson)">
       <Output TaskParameter="Lines" ItemName="_ServerJsonLines"/>
     </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(RootProps)">
+      <Output TaskParameter="Lines" ItemName="_RootPropsLines"/>
+    </ReadLinesFromFile>
+    <ReadLinesFromFile File="$(McpProgramCs)">
+      <Output TaskParameter="Lines" ItemName="_McpProgramLines"/>
+    </ReadLinesFromFile>
     <PropertyGroup>
       <_CsprojContent>@(_CsprojLines)</_CsprojContent>
       <_ServerJsonContent>@(_ServerJsonLines)</_ServerJsonContent>
+      <_RootPropsContent>@(_RootPropsLines)</_RootPropsContent>
+      <_McpProgramContent>@(_McpProgramLines)</_McpProgramContent>
     </PropertyGroup>
     <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_CsprojContent)", "\x3cVersion\x3e"))'
            Text="No &lt;Version&gt; element found in $(McpCsproj)."/>
@@ -111,59 +121,51 @@
            Text="Version mismatch: $(McpCsproj) has '$(_CsprojVersion)' but $(McpServerJson) has '$(_ServerJsonVersion)'."/>
 
     <!-- RuntimeIdentifiers of the MCP project must match the release perimeter exactly. -->
-    <Exec Command="findstr /C:&quot;&lt;RuntimeIdentifiers&gt;$(ExpectedMcpRids)&lt;/RuntimeIdentifiers&gt;&quot; &quot;$(McpCsproj)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_RidsExit"/>
-    </Exec>
-    <Error Condition="'$(_RidsExit)' != '0'"
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_CsprojContent)", "\x3cRuntimeIdentifiers\x3e$(ExpectedMcpRids)\x3c/RuntimeIdentifiers\x3e"))'
            Text="$(McpCsproj) RuntimeIdentifiers must be exactly '$(ExpectedMcpRids)'."/>
 
     <!-- Artifacts output must stay enabled at the repo root. -->
-    <Exec Command="findstr /C:&quot;&lt;UseArtifactsOutput&gt;true&lt;/UseArtifactsOutput&gt;&quot; &quot;$(RootProps)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_ArtifactsExit"/>
-    </Exec>
-    <Error Condition="'$(_ArtifactsExit)' != '0' or '$(UseArtifactsOutput)' != 'true'"
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_RootPropsContent)&quot;, &quot;\x3cUseArtifactsOutput\x3etrue\x3c/UseArtifactsOutput\x3e&quot;)) or '$(UseArtifactsOutput)' != 'true'"
            Text="UseArtifactsOutput must be true in Directory.Build.props."/>
 
     <!-- No hardcoded version literal left in Program.cs (BuildInfo is generated from $(Version)). -->
-    <Exec Command="findstr /C:&quot;$(_CsprojVersion)&quot; &quot;$(McpProgramCs)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_ProgramVersionExit"/>
-    </Exec>
-    <Error Condition="'$(_ProgramVersionExit)' == '0'"
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_McpProgramContent)", "$([System.Text.RegularExpressions.Regex]::Escape("$(_CsprojVersion)"))"))'
            Text="$(McpProgramCs) still hardcodes the version literal '$(_CsprojVersion)'; use BuildInfo.Version instead."/>
 
     <!-- server.json must expose FREEBOX_SERVER_ADDRESS. -->
-    <Exec Command="findstr /C:&quot;FREEBOX_SERVER_ADDRESS&quot; &quot;$(McpServerJson)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_ServerAddressExit"/>
-    </Exec>
-    <Error Condition="'$(_ServerAddressExit)' != '0'"
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ServerJsonContent)", "FREEBOX_SERVER_ADDRESS"))'
            Text="$(McpServerJson) must declare the FREEBOX_SERVER_ADDRESS environment variable."/>
 
     <!-- No leftover io.github.freenaute application id under mcp/ or libs/ (recursive scan). -->
-    <Exec Command="findstr /S /I /M /C:&quot;io.github.freenaute&quot; &quot;*.cs&quot; &quot;*.csproj&quot; &quot;*.json&quot; &quot;*.md&quot;" IgnoreExitCode="true" WorkingDirectory="$(McpDir)">
-      <Output TaskParameter="ExitCode" PropertyName="_McpIdExit"/>
-    </Exec>
-    <Error Condition="'$(_McpIdExit)' == '0'"
-           Text="Leftover 'io.github.freenaute' id under mcp/ (files listed by findstr above)."/>
-    <Exec Command="findstr /S /I /M /C:&quot;io.github.freenaute&quot; &quot;*.cs&quot; &quot;*.csproj&quot; &quot;*.json&quot; &quot;*.md&quot;" IgnoreExitCode="true" WorkingDirectory="$(LibsDir)">
-      <Output TaskParameter="ExitCode" PropertyName="_LibsIdExit"/>
-    </Exec>
-    <Error Condition="'$(_LibsIdExit)' == '0'"
-           Text="Leftover 'io.github.freenaute' id under libs/ (files listed by findstr above)."/>
+    <ItemGroup>
+      <_LegacyIdScanFile Include="$(McpDir)/**/*.cs;$(McpDir)/**/*.csproj;$(McpDir)/**/*.json;$(McpDir)/**/*.md;
+                                 $(LibsDir)/**/*.cs;$(LibsDir)/**/*.csproj;$(LibsDir)/**/*.json;$(LibsDir)/**/*.md"/>
+      <_LegacyIdMatch Include="@(_LegacyIdScanFile)"
+                      Condition="$([System.IO.File]::ReadAllText('%(_LegacyIdScanFile.FullPath)').Contains('io.github.freenaute', System.StringComparison.OrdinalIgnoreCase))"/>
+    </ItemGroup>
+    <Error Condition="'@(_LegacyIdMatch)' != ''"
+           Text="Leftover 'io.github.freenaute' id under mcp/ or libs/: @(_LegacyIdMatch)."/>
 
     <Message Importance="high" Text="ValidateMetadata: OK (sdk=$(ExpectedSdkVersion), version=$(_CsprojVersion), rids=$(ExpectedMcpRids))."/>
   </Target>
 
   <!-- Validates the container definitions. Per-file rules are delegated to
        _ValidateContainerFile through a child MSBuild invocation so each file gets its
-       own property scope (batched tasks would overwrite the captured findstr outputs). -->
+       own property scope. -->
   <Target Name="ValidateContainers" Condition="'$(_IsMcpProject)' == 'true'">
-    <Error Condition="!Exists('$(LinuxDockerfile)')" Text="Missing $(LinuxDockerfile)."/>
-    <Error Condition="!Exists('$(WindowsDockerfile)')" Text="Missing $(WindowsDockerfile) (owned by the containers agent)."/>
+    <Error Condition="!Exists('$(LinuxX64Dockerfile)')" Text="Missing $(LinuxX64Dockerfile)."/>
+    <Error Condition="!Exists('$(LinuxArmDockerfile)')" Text="Missing $(LinuxArmDockerfile)."/>
+    <Error Condition="!Exists('$(WindowsX64Dockerfile)')" Text="Missing $(WindowsX64Dockerfile)."/>
+    <Error Condition="!Exists('$(WindowsArmDockerfile)')" Text="Missing $(WindowsArmDockerfile)."/>
     <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
-             Properties="ContainerFile=$(LinuxDockerfile);ContainerKind=linux;ContainerRid1=linux-x64;ContainerRid2=linux-arm64;ContainerRequireNonRootUser=true"/>
+             Properties="ContainerFile=$(LinuxX64Dockerfile);ContainerKind=linux-x64;ContainerRid1=linux-x64;ContainerRequireNonRootUser=true"/>
     <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
-             Properties="ContainerFile=$(WindowsDockerfile);ContainerKind=windows;ContainerRid1=win-x64;ContainerRid2=win-arm64;ContainerRequireNonRootUser=false"/>
-    <Message Importance="high" Text="ValidateContainers: OK (linux + windows Dockerfiles)."/>
+             Properties="ContainerFile=$(LinuxArmDockerfile);ContainerKind=linux-arm64;ContainerRid1=linux-arm64;ContainerRequireNonRootUser=true"/>
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
+             Properties="ContainerFile=$(WindowsX64Dockerfile);ContainerKind=windows-x64;ContainerRid1=win-x64;ContainerRequireNonRootUser=false"/>
+    <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="_ValidateContainerFile"
+             Properties="ContainerFile=$(WindowsArmDockerfile);ContainerKind=windows-arm64;ContainerRid1=win-arm64;ContainerRequireNonRootUser=false"/>
+    <Message Importance="high" Text="ValidateContainers: OK (linux/windows x64+arm Dockerfiles)."/>
   </Target>
 
   <!-- Per-Dockerfile rules, called by ValidateContainers with ContainerFile, ContainerKind
@@ -171,67 +173,48 @@
   <Target Name="_ValidateContainerFile">
     <Error Condition="!Exists('$(ContainerFile)')" Text="Missing Dockerfile: $(ContainerFile)"/>
 
+    <ReadLinesFromFile File="$(ContainerFile)">
+      <Output TaskParameter="Lines" ItemName="_ContainerLines"/>
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_ContainerContent>@(_ContainerLines, '%0A')</_ContainerContent>
+    </PropertyGroup>
+
     <!-- Every FROM must resolve to an mcr.microsoft.com base image, either literally or via
          an ARG indirection (${VAR}); ARG image defaults are checked separately below. -->
-    <Exec Command="findstr /R /C:&quot;^FROM&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
-      <Output TaskParameter="ConsoleOutput" PropertyName="_FromLines"/>
-    </Exec>
-    <Error Condition="'$(_FromLines)' == ''" Text="$(ContainerKind) Dockerfile has no FROM instruction: $(ContainerFile)"/>
-    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_FromLines)", "(?m)^FROM\s+(?!mcr\.microsoft\.com)(?!\x24)"))'
-           Text="$(ContainerKind) Dockerfile: every FROM must use an mcr.microsoft.com base image (literal or ARG default with mcr default). Offending FROM lines: $(_FromLines)"/>
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*FROM\s+"))'
+           Text="$(ContainerKind) Dockerfile has no FROM instruction: $(ContainerFile)"/>
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*FROM\s+(?!mcr\.microsoft\.com(?:/|\s))(?!\x24\{?[A-Za-z_][A-Za-z0-9_]*\}?)[^\r\n]+"))'
+           Text="$(ContainerKind) Dockerfile: every FROM must use an mcr.microsoft.com base image directly or through an ARG with an MCR default: $(ContainerFile)"/>
 
     <!-- No scratch base image. -->
-    <Exec Command="findstr /I /C:&quot;FROM scratch&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_ScratchExit"/>
-    </Exec>
-    <Error Condition="'$(_ScratchExit)' == '0'"
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*FROM[ \t]+scratch(?:[ \t]|$)"))'
            Text="$(ContainerKind) Dockerfile must not use a 'FROM scratch' base image: $(ContainerFile)"/>
 
     <!-- An ARG default that looks like an image (contains '/') must be mcr.microsoft.com. -->
-    <Exec Command="findstr /R /C:&quot;^ARG&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
-      <Output TaskParameter="ConsoleOutput" PropertyName="_ArgLines"/>
-    </Exec>
-    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ArgLines)", "(?m)^ARG\s+\w+\s*=\s*(?!mcr\.microsoft\.com)\S*/"))'
-           Text="$(ContainerKind) Dockerfile: an ARG default that looks like an image must be mcr.microsoft.com. Offending ARG lines: $(_ArgLines)"/>
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*ARG[ \t]+\w+[ \t]*=[ \t]*(?!mcr\.microsoft\.com(?:/|\s))\S*/"))'
+           Text="$(ContainerKind) Dockerfile: every image-like ARG default must use mcr.microsoft.com: $(ContainerFile)"/>
 
     <!-- No ENV/ARG line may match (?i)(token|secret|password|credential). -->
-    <Exec Command="findstr /R /I /C:&quot;^ENV.*token&quot; /C:&quot;^ENV.*secret&quot; /C:&quot;^ENV.*password&quot; /C:&quot;^ENV.*credential&quot; /C:&quot;^ARG.*token&quot; /C:&quot;^ARG.*secret&quot; /C:&quot;^ARG.*password&quot; /C:&quot;^ARG.*credential&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_SecretExit"/>
-    </Exec>
-    <Error Condition="'$(_SecretExit)' == '0'"
+    <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*(?:ENV|ARG)\b[^\r\n]*(?:token|secret|password|credential)"))'
            Text="$(ContainerKind) Dockerfile: no ENV/ARG line may match (?i)(token|secret|password|credential): $(ContainerFile)"/>
 
     <!-- Native AOT publish must be enabled in the image build. -->
-    <Exec Command="findstr /C:&quot;PublishAot=true&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_AotExit"/>
-    </Exec>
-    <Error Condition="'$(_AotExit)' != '0'"
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "PublishAot[ \t]*=[ \t]*true"))'
            Text="$(ContainerKind) Dockerfile must publish with PublishAot=true: $(ContainerFile)"/>
 
     <!-- ENTRYPOINT is required. -->
-    <Exec Command="findstr /C:&quot;ENTRYPOINT&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_EntrypointExit"/>
-    </Exec>
-    <Error Condition="'$(_EntrypointExit)' != '0'"
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "(?im)^[ \t]*ENTRYPOINT(?:[ \t]|\[)"))'
            Text="$(ContainerKind) Dockerfile must declare an ENTRYPOINT: $(ContainerFile)"/>
 
     <!-- Linux images must run as the non-root UID 1654 (Windows containers have no POSIX UID). -->
-    <Exec Condition="'$(ContainerRequireNonRootUser)' == 'true'" Command="findstr /C:&quot;USER 1654&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_UserExit"/>
-    </Exec>
-    <Error Condition="'$(ContainerRequireNonRootUser)' == 'true' and '$(_UserExit)' != '0'"
+    <Error Condition="'$(ContainerRequireNonRootUser)' == 'true' and !$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_ContainerContent)&quot;, &quot;(?im)^[ \t]*USER[ \t]+1654(?:[ \t]|$)&quot;))"
            Text="linux Dockerfile must run as non-root with 'USER 1654': $(ContainerFile)"/>
 
-    <!-- Both whitelisted RIDs must appear in the file. -->
-    <Exec Command="findstr /C:&quot;$(ContainerRid1)&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_Rid1Exit"/>
-    </Exec>
-    <Error Condition="'$(_Rid1Exit)' != '0'"
+    <!-- Required RID markers must appear in the file. -->
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ContainerContent)", "\b$(ContainerRid1)\b"))'
            Text="$(ContainerKind) Dockerfile must whitelist RID $(ContainerRid1): $(ContainerFile)"/>
-    <Exec Command="findstr /C:&quot;$(ContainerRid2)&quot; &quot;$(ContainerFile)&quot;" IgnoreExitCode="true">
-      <Output TaskParameter="ExitCode" PropertyName="_Rid2Exit"/>
-    </Exec>
-    <Error Condition="'$(_Rid2Exit)' != '0'"
+    <Error Condition="'$(ContainerRid2)' != '' and !$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;$(_ContainerContent)&quot;, &quot;\b$(ContainerRid2)\b&quot;))"
            Text="$(ContainerKind) Dockerfile must whitelist RID $(ContainerRid2): $(ContainerFile)"/>
 
     <Message Importance="high" Text="ValidateContainers: $(ContainerKind) OK ($(ContainerFile))."/>
@@ -248,7 +231,9 @@
   </Target>
 
   <!-- Packs the MCP server as a NuGet tool (managed, non-AOT) into .artifacts/package/$(Configuration).
-       Usage: dotnet msbuild -t:Pack [-p:Configuration=Release] -->
+       Invoke on the MCP project only (calling -t:Pack on the .slnx would also run the SDK default
+       Pack target on every library):
+       Usage: dotnet msbuild mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -t:Pack -p:Configuration=Release -->
   <Target Name="Pack" Condition="'$(_IsMcpProject)' == 'true'">
     <MakeDir Directories="$(PackageRoot)/$(Configuration)"/>
     <Exec Command="dotnet pack &quot;$(McpCsproj)&quot; -c Release -p:PublishAot=false -p:SelfContained=false -o &quot;$(PackageRoot)/$(Configuration)&quot;"/>

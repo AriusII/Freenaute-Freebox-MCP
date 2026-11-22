@@ -39,11 +39,37 @@ public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
         Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
         OutputSchemaType = typeof(PairingApprovalToolResult))]
     [Description(
-        "Waits for physical approval of an existing or previously initiated pairing. It can be safely cancelled and resumed.")]
-    public async Task<PairingApprovalToolResult> WaitAsync(CancellationToken cancellationToken)
+        "Waits for physical approval of an existing or previously initiated pairing. It can be safely cancelled and resumed. Optional polling and timeout values can be provided.")]
+    public async Task<PairingApprovalToolResult> WaitAsync(
+        [Description("Optional polling interval in seconds (must be > 0). Defaults to host policy.")]
+        int? pollIntervalSeconds = null,
+        [Description("Optional timeout in seconds (must be > 0). Defaults to host policy.")]
+        int? timeoutSeconds = null,
+        CancellationToken cancellationToken = default)
     {
+        if (pollIntervalSeconds is <= 0)
+        {
+            return ToolResultFactory.Failure<PairingApprovalToolResult>(new FreeboxCoreError(
+                FreeboxCoreErrorCode.InvalidRequest,
+                "pollIntervalSeconds must be > 0."));
+        }
+
+        if (timeoutSeconds is <= 0)
+        {
+            return ToolResultFactory.Failure<PairingApprovalToolResult>(new FreeboxCoreError(
+                FreeboxCoreErrorCode.InvalidRequest,
+                "timeoutSeconds must be > 0."));
+        }
+
+        TimeSpan? pollInterval = pollIntervalSeconds is null
+            ? null
+            : TimeSpan.FromSeconds(pollIntervalSeconds.Value);
+        TimeSpan? timeout = timeoutSeconds is null
+            ? null
+            : TimeSpan.FromSeconds(timeoutSeconds.Value);
+
         FreeboxCoreResult<FreeboxCredentialResult> result =
-            await orchestrator.WaitForApprovalAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            await orchestrator.WaitForApprovalAsync(pollInterval, timeout, cancellationToken).ConfigureAwait(false);
         return result.IsSuccess
             ? new PairingApprovalToolResult(
                 result.Value!.State == FreeboxCredentialState.Approved,

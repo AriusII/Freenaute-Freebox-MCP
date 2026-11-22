@@ -9,7 +9,7 @@ internal static class Safe
             return string.Empty;
         }
 
-        string normalized = new(value.Where(character => !char.IsControl(character)).ToArray());
+        string normalized = new([.. value.Where(character => !char.IsControl(character))]);
         return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
     }
 

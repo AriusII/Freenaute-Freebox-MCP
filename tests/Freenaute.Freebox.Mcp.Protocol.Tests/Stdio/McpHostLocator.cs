@@ -1,11 +1,9 @@
-using System.Reflection;
-
 namespace Freenaute.Freebox.Mcp.Protocol.Tests.Stdio;
 
 /// <summary>
-/// Locates the compiled MCP host assembly produced by the BuildMcpHost contract build
-/// (dotnet msbuild mcp/Freenaute.Freebox.Mcp -t:BuildMcpHost -p:Configuration=Release),
-/// whose output lands under .artifacts/protocol-host/Release/.
+///     Locates the compiled MCP host assembly produced by the BuildMcpHost contract build
+///     (dotnet msbuild mcp/Freenaute.Freebox.Mcp -t:BuildMcpHost -p:Configuration=Release),
+///     whose output lands under .artifacts/protocol-host/Release/.
 /// </summary>
 internal static class McpHostLocator
 {
@@ -47,8 +45,8 @@ internal static class McpHostLocator
 
             string[] candidates = Directory.GetFiles(root, HostAssemblyFileName, SearchOption.AllDirectories);
             string? found = candidates.FirstOrDefault(path =>
-                              path.Contains("release", StringComparison.OrdinalIgnoreCase))
-                          ?? candidates.FirstOrDefault();
+                                path.Contains("release", StringComparison.OrdinalIgnoreCase))
+                            ?? candidates.FirstOrDefault();
             if (found is not null)
             {
                 return found;

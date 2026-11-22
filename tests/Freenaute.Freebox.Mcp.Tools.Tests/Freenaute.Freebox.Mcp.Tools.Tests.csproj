@@ -12,6 +12,6 @@
     <ProjectReference Include="..\..\libs\Freenaute.Freebox.Mcp.Tools\Freenaute.Freebox.Mcp.Tools.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <None Remove="packages.lock.json" />
+    <None Remove="packages.lock.json"/>
   </ItemGroup>
 </Project>

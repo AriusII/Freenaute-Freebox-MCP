@@ -17,6 +17,9 @@ public static class FreeboxMcpCoreServiceCollectionExtensions
                 .ValidateOnStart();
 
             services.AddFreeboxClient(client => Copy(options, client), true);
+            services.AddSingleton<IFreeboxAuthenticationRepository, FreeboxAuthenticationRepository>();
+            services.AddSingleton<IFreeboxDataRepository, FreeboxDataRepository>();
+            services.AddSingleton<IFreeboxStartupAuthenticationService, FreeboxStartupAuthenticationService>();
             services.AddSingleton<IFreeboxOrchestrator, FreeboxOrchestrator>();
 
             return services;
@@ -24,12 +27,19 @@ public static class FreeboxMcpCoreServiceCollectionExtensions
 
         public IServiceCollection AddFreeboxCredentialStorage<
             [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)]
-            TStorage>()
+        TStorage>()
             where TStorage : class, IFreeboxCredentialStorage
         {
             ArgumentNullException.ThrowIfNull(services);
             services.AddSingleton<IFreeboxCredentialStorage, TStorage>();
             services.AddSingleton<IFreeboxCredentialStore, FreeboxCredentialStoreAdapter>();
+            return services;
+        }
+
+        public IServiceCollection AddFreeboxStartupAuthentication()
+        {
+            ArgumentNullException.ThrowIfNull(services);
+            services.AddHostedService<FreeboxStartupAuthenticationHostedService>();
             return services;
         }
     }
@@ -47,6 +57,9 @@ public static class FreeboxMcpCoreServiceCollectionExtensions
         target.MdnsTimeout = source.MdnsTimeout;
         target.EnableResilience = source.EnableResilience;
         target.AllowPairingInitiation = source.AllowPairingInitiation;
+        target.PairingPollInterval = source.PairingPollInterval;
+        target.PairingWaitTimeout = source.PairingWaitTimeout;
+        target.AuthenticateOnStartup = source.AuthenticateOnStartup;
     }
 
     private static void Copy(FreeboxCoreOptions source, FreeboxClientOptions target)
@@ -84,5 +97,18 @@ public static class FreeboxMcpCoreServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(options.ApplicationVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.DeviceName);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CredentialProfile);
+        if (options.PairingPollInterval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "PairingPollInterval must be strictly positive.");
+        }
+
+        if (options.PairingWaitTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "PairingWaitTimeout must be strictly positive.");
+        }
     }
 }
