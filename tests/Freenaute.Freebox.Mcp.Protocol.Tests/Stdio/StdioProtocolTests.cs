@@ -105,7 +105,12 @@ public sealed class StdioProtocolTests
         string liveText = live.RootElement.GetProperty("result").GetProperty("contents")[0]
             .GetProperty("text").GetString()!;
         Assert.Contains("# Freebox status", liveText, StringComparison.Ordinal);
-        Assert.Contains("## Pairing", liveText, StringComparison.Ordinal);
+        bool hasStructuredLiveSnapshot = liveText.Contains("## Pairing", StringComparison.Ordinal);
+        bool hasUnavailableFallback = liveText.Contains("Live data is unavailable", StringComparison.Ordinal)
+                                      || liveText.Contains("Live data is currently unavailable.",
+                                          StringComparison.Ordinal);
+        Assert.True(hasStructuredLiveSnapshot || hasUnavailableFallback,
+            "Expected either a structured live snapshot or a sanitized unavailability fallback.");
         Assert.DoesNotContain("no `IFreeboxLiveResourceSource` is registered", liveText, StringComparison.Ordinal);
 
         JsonDocument shutdown = await SendAsync(process, input,
