@@ -1,10 +1,15 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Resources.Live;
 
 [McpServerResourceType]
-public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
+public sealed partial class LiveResources(
+    IFreeboxLiveResourceSource? source = null,
+    ILogger<LiveResources>? logger = null)
 {
     private const int MaxCharacters = 64 * 1024;
     private static readonly TimeSpan SourceTimeout = TimeSpan.FromSeconds(10);
+    private readonly ILogger<LiveResources> _logger = logger ?? NullLogger<LiveResources>.Instance;
 
     [McpServerResource(
         UriTemplate = "freebox://live/status",
@@ -13,6 +18,7 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
         MimeType = "text/markdown")]
     public async ValueTask<TextResourceContents> GetStatusAsync(CancellationToken cancellationToken)
     {
+        LogLiveResourceReadStarted(_logger);
         (string content, string? mediaType) = await ReadSourceAsync(cancellationToken).ConfigureAwait(false);
         string sanitized = Sanitize(content);
         bool truncated = sanitized.Length > MaxCharacters;
@@ -22,6 +28,7 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
             bounded += "\n\n[resource content truncated after 64 KiB]\n";
         }
 
+        LogLiveResourceReadSucceeded(_logger, bounded.Length, truncated);
         return new TextResourceContents
         {
             Uri = "freebox://live/status",
@@ -34,6 +41,7 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
     {
         if (source is null)
         {
+            LogLiveSourceUnavailable(_logger);
             return (
                 "# Freebox status\n\nLive data is unavailable because no `IFreeboxLiveResourceSource` is registered.\n",
                 null);
@@ -49,6 +57,7 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
+            LogLiveSourceTimeout(_logger, SourceTimeout.TotalSeconds);
             return (
                 "# Freebox status\n\nLive data is unavailable: the Freebox did not respond within 10 seconds.\n",
                 null);
@@ -56,6 +65,7 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             // Never leak exception details here: they may contain URLs, tokens or host names.
+            LogLiveSourceFailed(_logger, exception.Message);
             return ("# Freebox status\n\nLive data is currently unavailable.\n", null);
         }
     }
@@ -89,4 +99,23 @@ public sealed class LiveResources(IFreeboxLiveResourceSource? source = null)
 
         return normalized;
     }
+
+    [LoggerMessage(EventId = 3000, Level = LogLevel.Information,
+        Message = "Reading live resource freebox://live/status.")]
+    private static partial void LogLiveResourceReadStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 3001, Level = LogLevel.Information,
+        Message = "Live resource read succeeded (length={Length}, truncated={Truncated}).")]
+    private static partial void LogLiveResourceReadSucceeded(ILogger logger, int length, bool truncated);
+
+    [LoggerMessage(EventId = 3002, Level = LogLevel.Warning,
+        Message = "Live resource source unavailable: no IFreeboxLiveResourceSource registered.")]
+    private static partial void LogLiveSourceUnavailable(ILogger logger);
+
+    [LoggerMessage(EventId = 3003, Level = LogLevel.Warning,
+        Message = "Live resource source timeout after {TimeoutSeconds} seconds.")]
+    private static partial void LogLiveSourceTimeout(ILogger logger, double timeoutSeconds);
+
+    [LoggerMessage(EventId = 3004, Level = LogLevel.Warning, Message = "Live resource source failed: {Reason}")]
+    private static partial void LogLiveSourceFailed(ILogger logger, string? reason);
 }

@@ -1,5 +1,3 @@
-using Freenaute.Freebox.Mcp.Tools.Parental;
-
 namespace Freenaute.Freebox.Mcp.Tools.Serialization;
 
 [JsonSerializable(typeof(DiscoveryToolResult))]

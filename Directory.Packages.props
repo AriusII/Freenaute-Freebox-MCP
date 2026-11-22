@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Freenaute.Freebox.Client" Version="1.0.0"/>
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0"/>
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0"/>
     <PackageVersion Include="ModelContextProtocol" Version="2.4.0"/>
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0"/>

@@ -4,6 +4,12 @@ public interface IFreeboxOrchestrator
 {
     ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginPairingAsync(CancellationToken cancellationToken = default);
 
+    async ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginStartupPairingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await BeginPairingAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     ValueTask<FreeboxCoreResult<FreeboxCredentialResult>> WaitForApprovalAsync(
         TimeSpan? pollInterval = null,
         TimeSpan? timeout = null,

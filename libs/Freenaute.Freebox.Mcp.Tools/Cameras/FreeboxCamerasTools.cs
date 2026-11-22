@@ -1,7 +1,9 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Cameras;
 
 [McpServerToolType]
-public sealed class FreeboxCamerasTools
+public sealed partial class FreeboxCamerasTools
 {
     private const int MaxCameras = 32;
     private const int MaxLanguages = 8;
@@ -12,6 +14,7 @@ public sealed class FreeboxCamerasTools
     private readonly Func<CancellationToken, Task<UpdateStatus>> _getUpdatesAsync;
 
     private readonly Func<CancellationToken, Task<Camera[]>> _listCamerasAsync;
+    private readonly ILogger<FreeboxCamerasTools> _logger;
 
     public FreeboxCamerasTools(
         IFreeboxClient? client,
@@ -19,8 +22,10 @@ public sealed class FreeboxCamerasTools
         Func<CancellationToken, Task<LanguageSupport>>? getLanguageAsync = null,
         Func<CancellationToken, Task<StandbyStatus>>? getStandbyStatusAsync = null,
         Func<CancellationToken, Task<StandbyConfig>>? getStandbyConfigAsync = null,
-        Func<CancellationToken, Task<UpdateStatus>>? getUpdatesAsync = null)
+        Func<CancellationToken, Task<UpdateStatus>>? getUpdatesAsync = null,
+        ILogger<FreeboxCamerasTools>? logger = null)
     {
+        _logger = logger ?? NullLogger<FreeboxCamerasTools>.Instance;
         if (listCamerasAsync is null ||
             getLanguageAsync is null ||
             getStandbyStatusAsync is null ||
@@ -47,9 +52,11 @@ public sealed class FreeboxCamerasTools
     [Description("Returns bounded camera summaries without names, LAN IDs, or stream URLs.")]
     public async Task<CamerasToolResult> GetCamerasAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_cameras_overview");
         try
         {
             Camera[] cameras = await _listCamerasAsync(cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_cameras_overview", cameras.Length);
             return new CamerasToolResult([.. cameras.Take(MaxCameras).Select(MapCamera)]);
         }
         catch (OperationCanceledException)
@@ -58,6 +65,7 @@ public sealed class FreeboxCamerasTools
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            LogToolFailed(_logger, "freebox_cameras_overview", exception.Message);
             return ToolResultFactory.Failure<CamerasToolResult>(FreeboxErrorMapper.Map(exception));
         }
     }
@@ -68,6 +76,7 @@ public sealed class FreeboxCamerasTools
     [Description("Returns bounded home language, standby, and update states without sensitive payloads.")]
     public async Task<HomeStatusToolResult> GetHomeStatusAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_home_status");
         try
         {
             Task<LanguageSupport> languageTask = _getLanguageAsync(cancellationToken);
@@ -82,6 +91,7 @@ public sealed class FreeboxCamerasTools
             StandbyConfig standbyConfig = await standbyConfigTask.ConfigureAwait(false);
             UpdateStatus updates = await updatesTask.ConfigureAwait(false);
 
+            LogToolSucceeded(_logger, "freebox_home_status", 1);
             return new HomeStatusToolResult(
                 Safe.Text(language.Lang, 16),
                 ToBoundedTexts(language.AvailableLanguages, MaxLanguages, 16),
@@ -100,6 +110,7 @@ public sealed class FreeboxCamerasTools
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            LogToolFailed(_logger, "freebox_home_status", exception.Message);
             return ToolResultFactory.Failure<HomeStatusToolResult>(FreeboxErrorMapper.Map(exception));
         }
     }
@@ -127,4 +138,14 @@ public sealed class FreeboxCamerasTools
                 .Where(item => !string.IsNullOrWhiteSpace(item))
         ];
     }
+
+    [LoggerMessage(EventId = 1500, Level = LogLevel.Information, Message = "Executing {ToolName}.")]
+    private static partial void LogToolStarted(ILogger logger, string toolName);
+
+    [LoggerMessage(EventId = 1501, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (countHint={CountHint}).")]
+    private static partial void LogToolSucceeded(ILogger logger, string toolName, int countHint);
+
+    [LoggerMessage(EventId = 1502, Level = LogLevel.Warning, Message = "{ToolName} failed: {Reason}")]
+    private static partial void LogToolFailed(ILogger logger, string toolName, string? reason);
 }

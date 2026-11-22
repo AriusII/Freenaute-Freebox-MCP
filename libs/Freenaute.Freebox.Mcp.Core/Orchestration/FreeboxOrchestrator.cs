@@ -29,34 +29,13 @@ public sealed class FreeboxOrchestrator(
     public async ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginPairingAsync(
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!_allowPairingInitiation)
-        {
-            return FreeboxCoreResults.Failure<FreeboxPairingResult>(
-                FreeboxErrorMapper.Map(
-                    new InvalidOperationException("Pairing initiation is disabled by host policy.")));
-        }
+        return await BeginPairingCoreAsync(true, cancellationToken).ConfigureAwait(false);
+    }
 
-        if (!_credentialStore.IsAvailable)
-        {
-            return CredentialStoreUnavailable<FreeboxPairingResult>();
-        }
-
-        try
-        {
-            FreeboxApprovalRegistration registration =
-                await _authenticationRepository.BeginPairingAsync(cancellationToken).ConfigureAwait(false);
-
-            return FreeboxCoreResults.Success(new FreeboxPairingResult(Map(registration.Status)));
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            return FreeboxCoreResults.Failure<FreeboxPairingResult>(FreeboxErrorMapper.Map(exception));
-        }
+    public async ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginStartupPairingAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await BeginPairingCoreAsync(false, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<FreeboxCoreResult<FreeboxCredentialResult>> WaitForApprovalAsync(
@@ -342,6 +321,40 @@ public sealed class FreeboxOrchestrator(
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             return FreeboxCoreResults.Failure<FreeboxSystemSnapshot>(FreeboxErrorMapper.Map(exception));
+        }
+    }
+
+    private async ValueTask<FreeboxCoreResult<FreeboxPairingResult>> BeginPairingCoreAsync(
+        bool enforceToolPolicy,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (enforceToolPolicy && !_allowPairingInitiation)
+        {
+            return FreeboxCoreResults.Failure<FreeboxPairingResult>(
+                FreeboxErrorMapper.Map(
+                    new InvalidOperationException("Pairing initiation is disabled by host policy.")));
+        }
+
+        if (!_credentialStore.IsAvailable)
+        {
+            return CredentialStoreUnavailable<FreeboxPairingResult>();
+        }
+
+        try
+        {
+            FreeboxApprovalRegistration registration =
+                await _authenticationRepository.BeginPairingAsync(cancellationToken).ConfigureAwait(false);
+
+            return FreeboxCoreResults.Success(new FreeboxPairingResult(Map(registration.Status)));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            return FreeboxCoreResults.Failure<FreeboxPairingResult>(FreeboxErrorMapper.Map(exception));
         }
     }
 

@@ -1,7 +1,11 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Contacts;
 
 [McpServerToolType]
-public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEntry[]>> getContacts)
+public sealed partial class FreeboxContactsTools(
+    Func<CancellationToken, Task<ContactEntry[]>> getContacts,
+    ILogger<FreeboxContactsTools>? logger = null)
 {
     private const int DefaultLimit = 25;
     private const int MaxContacts = 64;
@@ -10,8 +14,11 @@ public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEnt
     private readonly Func<CancellationToken, Task<ContactEntry[]>> _getContacts =
         getContacts ?? throw new ArgumentNullException(nameof(getContacts));
 
-    public FreeboxContactsTools(IFreeboxClient client)
-        : this(cancellationToken => client.Services.Contacts.GetAllAsync(cancellationToken))
+    private readonly ILogger<FreeboxContactsTools> _logger =
+        logger ?? NullLogger<FreeboxContactsTools>.Instance;
+
+    public FreeboxContactsTools(IFreeboxClient client, ILogger<FreeboxContactsTools>? logger = null)
+        : this(cancellationToken => client.Services.Contacts.GetAllAsync(cancellationToken), logger)
     {
         ArgumentNullException.ThrowIfNull(client);
     }
@@ -51,6 +58,7 @@ public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEnt
         bool requireQuery,
         CancellationToken cancellationToken)
     {
+        LogContactsStarted(_logger, requireQuery ? "freebox_contacts_search" : "freebox_contacts_list", limit);
         string? normalizedQuery = ValidateAndNormalizeQuery(query, requireQuery);
         int boundedLimit = ValidateLimit(limit);
 
@@ -66,6 +74,11 @@ public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEnt
                     .Select(MapContact)
             ];
 
+            LogContactsSucceeded(
+                _logger,
+                requireQuery ? "freebox_contacts_search" : "freebox_contacts_list",
+                filtered.Length,
+                mapped.Length);
             return new ContactsToolResult(normalizedQuery, filtered.Length, mapped);
         }
         catch (OperationCanceledException)
@@ -74,6 +87,8 @@ public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEnt
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            LogContactsFailed(_logger, requireQuery ? "freebox_contacts_search" : "freebox_contacts_list",
+                exception.Message);
             return ToolResultFactory.Failure<ContactsToolResult>(FreeboxErrorMapper.Map(exception));
         }
     }
@@ -175,4 +190,15 @@ public sealed class FreeboxContactsTools(Func<CancellationToken, Task<ContactEnt
     {
         throw new InvalidOperationException($"{FreeboxCoreErrorCode.InvalidRequest}: {message}");
     }
+
+    [LoggerMessage(EventId = 1600, Level = LogLevel.Information,
+        Message = "Executing {ToolName} (limit={Limit}).")]
+    private static partial void LogContactsStarted(ILogger logger, string toolName, int limit);
+
+    [LoggerMessage(EventId = 1601, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (matched={Matched}, returned={Returned}).")]
+    private static partial void LogContactsSucceeded(ILogger logger, string toolName, int matched, int returned);
+
+    [LoggerMessage(EventId = 1602, Level = LogLevel.Warning, Message = "{ToolName} failed: {Reason}")]
+    private static partial void LogContactsFailed(ILogger logger, string toolName, string? reason);
 }

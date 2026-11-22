@@ -8,6 +8,7 @@ FROM ${SDK_IMAGE} AS sdk
 FROM ${TOOLCHAIN_IMAGE} AS build
 
 ARG VERSION=0.1.0-beta
+ARG BUILD_CONFIGURATION=Release
 ENV RID=win-x64
 
 SHELL ["powershell.exe", "-NoProfile", "-Command", "$ErrorActionPreference = 'Stop';"]
@@ -28,7 +29,7 @@ COPY . .
 
 RUN dotnet restore mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj --runtime $env:RID; \
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
-    dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -c Release -r $env:RID --self-contained true --no-restore -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true -p:Version=$env:VERSION -o C:\app\publish; \
+    dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -c $env:BUILD_CONFIGURATION -r $env:RID --self-contained true --no-restore -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true -p:Version=$env:VERSION -o C:\app\publish; \
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; \
     $executable = 'C:\app\publish\Freenaute.Freebox.Mcp.exe'; \
     $bytes = [IO.File]::ReadAllBytes($executable); \
@@ -42,7 +43,7 @@ ARG VERSION=0.1.0-beta
 
 LABEL org.opencontainers.image.title="Freenaute Freebox MCP" `
       org.opencontainers.image.description="Local stdio MCP server for Freebox discovery, pairing coordination, and system/network status (C#/.NET 11 Native AOT, single file)." `
-      org.opencontainers.image.source="https://github.com/freenaute/Freenaute-Freebox-MCP" `
+      org.opencontainers.image.source="https://github.com/AriusII/Freenaute-Freebox-MCP" `
       org.opencontainers.image.licenses="MIT" `
       org.opencontainers.image.version="${VERSION}"
 

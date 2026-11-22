@@ -16,6 +16,7 @@ public static class FreeboxMcpCoreServiceCollectionExtensions
                 .Configure(current => Copy(options, current))
                 .ValidateOnStart();
 
+            services.AddSingleton<IHttpMessageHandlerBuilderFilter, FreeboxAuthorizeTrackPathRewriteFilter>();
             services.AddFreeboxClient(client => Copy(options, client), true);
             services.AddSingleton<IFreeboxAuthenticationRepository, FreeboxAuthenticationRepository>();
             services.AddSingleton<IFreeboxDataRepository, FreeboxDataRepository>();

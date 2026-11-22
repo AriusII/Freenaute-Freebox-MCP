@@ -1,9 +1,16 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Parental;
 
 [McpServerToolType]
-public sealed class FreeboxParentalTools(IFreeboxClient client)
+public sealed partial class FreeboxParentalTools(
+    IFreeboxClient client,
+    ILogger<FreeboxParentalTools>? logger = null)
 {
     private const int MaxFilters = 128;
+
+    private readonly ILogger<FreeboxParentalTools> _logger =
+        logger ?? NullLogger<FreeboxParentalTools>.Instance;
 
     [McpServerTool(Name = "freebox_parental_config", Title = "Get Freebox parental-control configuration",
         ReadOnly = true, Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
@@ -11,9 +18,11 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
     [Description("Returns sanitized parental-control policy configuration without exposing target identities.")]
     public async Task<ParentalConfigToolResult> GetConfigAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_parental_config");
         try
         {
             ParentalFilterConfig config = await client.Parental.GetConfigAsync(cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_parental_config", 1);
             return new ParentalConfigToolResult(Safe.Text(config.DefaultFilterMode?.Value, 24));
         }
         catch (OperationCanceledException)
@@ -22,6 +31,7 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            LogToolFailed(_logger, "freebox_parental_config", exception.Message);
             return ToolResultFactory.Failure<ParentalConfigToolResult>(FreeboxErrorMapper.Map(exception));
         }
     }
@@ -36,6 +46,7 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
         int limit = 64,
         CancellationToken cancellationToken = default)
     {
+        LogToolStarted(_logger, "freebox_parental_filters");
         if (limit is < 1 or > MaxFilters)
         {
             return ToolResultFactory.Failure<ParentalFiltersToolResult>(new FreeboxCoreError(
@@ -52,6 +63,7 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
                     .Take(limit)
                     .Select(MapFilter)
             ];
+            LogToolSucceeded(_logger, "freebox_parental_filters", mapped.Length);
             return new ParentalFiltersToolResult(filters.Length, mapped);
         }
         catch (OperationCanceledException)
@@ -60,6 +72,7 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
+            LogToolFailed(_logger, "freebox_parental_filters", exception.Message);
             return ToolResultFactory.Failure<ParentalFiltersToolResult>(FreeboxErrorMapper.Map(exception));
         }
     }
@@ -81,4 +94,14 @@ public sealed class FreeboxParentalTools(IFreeboxClient client)
             filter.CurrentMappingIdx,
             filter.NextChange);
     }
+
+    [LoggerMessage(EventId = 2000, Level = LogLevel.Information, Message = "Executing {ToolName}.")]
+    private static partial void LogToolStarted(ILogger logger, string toolName);
+
+    [LoggerMessage(EventId = 2001, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (countHint={CountHint}).")]
+    private static partial void LogToolSucceeded(ILogger logger, string toolName, int countHint);
+
+    [LoggerMessage(EventId = 2002, Level = LogLevel.Warning, Message = "{ToolName} failed: {Reason}")]
+    private static partial void LogToolFailed(ILogger logger, string toolName, string? reason);
 }

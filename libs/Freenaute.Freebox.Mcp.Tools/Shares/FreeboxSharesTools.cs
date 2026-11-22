@@ -1,10 +1,17 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Shares;
 
 [McpServerToolType]
-public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
+public sealed partial class FreeboxSharesTools(
+    IFreeboxOrchestrator orchestrator,
+    ILogger<FreeboxSharesTools>? logger = null)
 {
     private const int MaxInterfaces = 32;
     private const int MaxHostsPerInterface = 128;
+
+    private readonly ILogger<FreeboxSharesTools> _logger =
+        logger ?? NullLogger<FreeboxSharesTools>.Instance;
 
     [McpServerTool(Name = "freebox_nas_visibility", Title = "Get Freebox NAS visibility", ReadOnly = true,
         Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
@@ -12,14 +19,17 @@ public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
     [Description("Returns bounded sanitized NAS/storage visibility state without exposing identifiers.")]
     public async Task<NasVisibilityToolResult> GetNasVisibilityAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_nas_visibility");
         FreeboxCoreResult<FreeboxSystemSnapshot> result = await orchestrator
             .GetSystemSnapshotAsync(cancellationToken).ConfigureAwait(false);
         if (!result.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_nas_visibility", result.Error?.Code);
             return ToolResultFactory.Failure<NasVisibilityToolResult>(result.Error!);
         }
 
         FreeboxSystemSnapshot value = result.Value!;
+        LogToolSucceeded(_logger, "freebox_nas_visibility", 1);
         return new NasVisibilityToolResult(
             value.UserStoragePowered,
             Safe.Text(value.DiskStatus, 32),
@@ -37,6 +47,7 @@ public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
         string? interfaceName = null,
         CancellationToken cancellationToken = default)
     {
+        LogToolStarted(_logger, "freebox_shares_visibility");
         if (interfaceName is not null && (interfaceName.Length is < 1 or > 64 || interfaceName.Any(char.IsControl)))
         {
             throw new ArgumentException("interfaceName must be 1 to 64 characters and contain no control characters.",
@@ -47,6 +58,7 @@ public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
             .GetNetworkSnapshotAsync(includeHosts, interfaceName, cancellationToken).ConfigureAwait(false);
         if (!result.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_shares_visibility", result.Error?.Code);
             return ToolResultFactory.Failure<SharesVisibilityToolResult>(result.Error!);
         }
 
@@ -84,6 +96,7 @@ public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
                 })
         ];
 
+        LogToolSucceeded(_logger, "freebox_shares_visibility", interfaces.Length);
         return new SharesVisibilityToolResult(
             Safe.Text(lan.Name, 64),
             Safe.Text(lan.Type, 32),
@@ -93,4 +106,14 @@ public sealed class FreeboxSharesTools(IFreeboxOrchestrator orchestrator)
             hasHostCounters ? totalActive : null,
             interfaces);
     }
+
+    [LoggerMessage(EventId = 1800, Level = LogLevel.Information, Message = "Executing {ToolName}.")]
+    private static partial void LogToolStarted(ILogger logger, string toolName);
+
+    [LoggerMessage(EventId = 1801, Level = LogLevel.Warning, Message = "{ToolName} failed: {ErrorCode}")]
+    private static partial void LogToolFailed(ILogger logger, string toolName, FreeboxCoreErrorCode? errorCode);
+
+    [LoggerMessage(EventId = 1802, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (countHint={CountHint}).")]
+    private static partial void LogToolSucceeded(ILogger logger, string toolName, int countHint);
 }

@@ -51,7 +51,8 @@ internal static class McpServiceRegistration
                     Name = "Freenaute.Freebox.Mcp",
                     Version = BuildInfo.Version
                 };
-                options.ServerInstructions = "Pairing initiation is disabled unless explicitly enabled by host policy.";
+                options.ServerInstructions =
+                    "Startup authentication auto-bootstraps pairing when needed. Manual pairing initiation remains disabled unless explicitly enabled by host policy.";
             })
             .WithStdioServerTransport()
             .WithTools<FreeboxDiscoveryTools>(serializerOptions)

@@ -1,14 +1,22 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Resources.Live;
 
-public sealed class OrchestratorFreeboxLiveResourceSource(IFreeboxOrchestrator orchestrator)
+public sealed partial class OrchestratorFreeboxLiveResourceSource(
+    IFreeboxOrchestrator orchestrator,
+    ILogger<OrchestratorFreeboxLiveResourceSource>? logger = null)
     : IFreeboxLiveResourceSource
 {
     private const int MaxComponents = 16;
     private const int MaxValueLength = 32;
 
+    private readonly ILogger<OrchestratorFreeboxLiveResourceSource> _logger =
+        logger ?? NullLogger<OrchestratorFreeboxLiveResourceSource>.Instance;
+
     public async ValueTask<FreeboxLiveSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(orchestrator);
+        LogSnapshotStarted(_logger);
 
         FreeboxCoreResult<FreeboxConnectionResult> connectionTask =
             await orchestrator.GetConnectionStatusAsync(cancellationToken).ConfigureAwait(false);
@@ -21,6 +29,11 @@ public sealed class OrchestratorFreeboxLiveResourceSource(IFreeboxOrchestrator o
         AppendAvailability(text, connectionTask);
         AppendNetwork(text, networkTask);
         AppendSystem(text, systemTask);
+        LogSnapshotCompleted(
+            _logger,
+            connectionTask.IsSuccess,
+            networkTask.IsSuccess,
+            systemTask.IsSuccess);
         return new FreeboxLiveSnapshot(BoundAndSanitize(text.ToString()), "text/markdown");
     }
 
@@ -164,4 +177,15 @@ public sealed class OrchestratorFreeboxLiveResourceSource(IFreeboxOrchestrator o
     {
         return value?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
     }
+
+    [LoggerMessage(EventId = 3010, Level = LogLevel.Information, Message = "Building live Freebox status snapshot.")]
+    private static partial void LogSnapshotStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 3011, Level = LogLevel.Information,
+        Message = "Live snapshot built (connectionOk={ConnectionOk}, networkOk={NetworkOk}, systemOk={SystemOk}).")]
+    private static partial void LogSnapshotCompleted(
+        ILogger logger,
+        bool connectionOk,
+        bool networkOk,
+        bool systemOk);
 }

@@ -35,6 +35,17 @@ Documentation resources are static embedded markdown; the live resource is produ
 
 All tools are `Destructive = false`, `OpenWorld = true`, and return typed structured content plus JSON text.
 
+## Canonical tool inventory (31)
+
+`freebox_airmedia_receivers`, `freebox_airmedia_status`, `freebox_calls_account`, `freebox_calls_clear_log`,
+`freebox_calls_log`, `freebox_calls_mark_all_read`, `freebox_cameras_overview`, `freebox_connection_status`,
+`freebox_contacts_list`, `freebox_contacts_search`, `freebox_discover`, `freebox_download_configuration`,
+`freebox_download_files`, `freebox_download_log`, `freebox_download_pieces`, `freebox_download_stats`,
+`freebox_download_status`, `freebox_downloads_list`, `freebox_home_status`, `freebox_lan_overview`,
+`freebox_nas_visibility`, `freebox_notifications_feed`, `freebox_pairing_initiate`, `freebox_pairing_status`,
+`freebox_pairing_wait`, `freebox_parental_config`, `freebox_parental_filters`, `freebox_shares_visibility`,
+`freebox_status_feed`, `freebox_system_status`, `freebox_wifi_status`.
+
 ## Tool families
 
 ### Discovery family

@@ -113,6 +113,8 @@
            Text="No &lt;Version&gt; element found in $(McpCsproj)."/>
     <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ServerJsonContent)", "\x22version\x22\s*:"))'
            Text='No "version" field found in $(McpServerJson).'/>
+    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_CsprojContent)", "\x3cNone\s+Include\x3d\x22\.mcp\\server\.json\x22[^>]*Pack\x3d\x22true\x22[^>]*PackagePath\x3d\x22\.mcp/\x22"))'
+           Text="$(McpCsproj) must pack .mcp/server.json (Pack=true, PackagePath=.mcp/)."/>
     <PropertyGroup>
       <_CsprojVersion>$([System.Text.RegularExpressions.Regex]::Match("$(_CsprojContent)", "\x3cVersion\x3e([^\x3c]+)\x3c/Version\x3e").Groups[1].Value)</_CsprojVersion>
       <_ServerJsonVersion>$([System.Text.RegularExpressions.Regex]::Match("$(_ServerJsonContent)", "\x22version\x22\s*:\s*\x22([^\x22]+)\x22").Groups[1].Value)</_ServerJsonVersion>
@@ -131,10 +133,6 @@
     <!-- No hardcoded version literal left in Program.cs (BuildInfo is generated from $(Version)). -->
     <Error Condition='$([System.Text.RegularExpressions.Regex]::IsMatch("$(_McpProgramContent)", "$([System.Text.RegularExpressions.Regex]::Escape("$(_CsprojVersion)"))"))'
            Text="$(McpProgramCs) still hardcodes the version literal '$(_CsprojVersion)'; use BuildInfo.Version instead."/>
-
-    <!-- server.json must expose FREEBOX_SERVER_ADDRESS. -->
-    <Error Condition='!$([System.Text.RegularExpressions.Regex]::IsMatch("$(_ServerJsonContent)", "FREEBOX_SERVER_ADDRESS"))'
-           Text="$(McpServerJson) must declare the FREEBOX_SERVER_ADDRESS environment variable."/>
 
     <!-- No leftover io.github.freenaute application id under mcp/ or libs/ (recursive scan). -->
     <ItemGroup>

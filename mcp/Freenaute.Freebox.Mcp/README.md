@@ -29,36 +29,7 @@ dnx Freenaute.Freebox.Mcp --version 0.1.0-beta --yes
   "mcpServers": {
     "freenaute-freebox-mcp": {
       "type": "stdio",
-      "command": "freenaute-freebox-mcp",
-      "env": {
-        "FREEBOX_ALLOW_PAIRING_INITIATION": "true"
-      }
-    }
-  }
-}
-```
-
-```json
-{
-  "mcpServers": {
-    "freenaute-freebox-mcp": {
-      "type": "stdio",
-      "command": "dnx",
-      "args": ["Freenaute.Freebox.Mcp", "--version", "0.1.0-beta", "--yes"]
-    }
-  }
-}
-```
-
-Or from source:
-
-```json
-{
-  "mcpServers": {
-    "freenaute-freebox-mcp": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj"]
+      "command": "freenaute-freebox-mcp"
     }
   }
 }
@@ -66,7 +37,7 @@ Or from source:
 
 ## Configuration (environment variables)
 
-All optional; declared in `.mcp/server.json`:
+All optional; configured by host runtime environment:
 
 | Variable                                | Default                         | Meaning                                                                                                                                                                            |
 |-----------------------------------------|---------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -74,11 +45,11 @@ All optional; declared in `.mcp/server.json`:
 | `FREEBOX_APPLICATION_NAME`              | `Freenaute Freebox MCP`         | Application name shown during pairing.                                                                                                                                             |
 | `FREEBOX_DEVICE_NAME`                   | machine name                    | Device name shown during pairing.                                                                                                                                                  |
 | `FREEBOX_CREDENTIAL_PROFILE`            | `default`                       | Credential profile; scopes the stored credential with the application ID and Freebox UID.                                                                                          |
-| `FREEBOX_ALLOW_PAIRING_INITIATION`      | unset (disabled)                | Set exactly to `1`, `true`, or `TRUE` to allow `freebox_pairing_initiate`. Waiting on an already-started pairing (`freebox_pairing_wait`) remains possible without this opt-in.    |
+| `FREEBOX_ALLOW_PAIRING_INITIATION`      | unset (disabled)                | Set exactly to `1`, `true`, or `TRUE` to allow the `freebox_pairing_initiate` tool. Startup bootstrap does not require this opt-in.                                                |
 | `FREEBOX_SERVER_ADDRESS`                | `https://mafreebox.freebox.fr/` | Freebox server base address passed to the Freebox client.                                                                                                                          |
 | `FREEBOX_PAIRING_POLL_INTERVAL_SECONDS` | `2`                             | Default polling interval (seconds) used by `freebox_pairing_wait` when no explicit argument is provided. Must be `> 0`.                                                            |
 | `FREEBOX_PAIRING_WAIT_TIMEOUT_SECONDS`  | `600`                           | Default timeout (seconds) used by `freebox_pairing_wait` when no explicit argument is provided. Must be `> 0`.                                                                     |
-| `FREEBOX_AUTHENTICATE_ON_STARTUP`       | `true`                          | Enables startup authentication bootstrap (reuse persisted credentials and run pairing wait workflow when needed).                                                                  |
+| `FREEBOX_AUTHENTICATE_ON_STARTUP`       | `true`                          | Enables startup authentication bootstrap (reuse persisted credentials; if missing/expired, initiate pairing and wait for physical approval automatically).                         |
 | `FREEBOX_CREDENTIAL_FILE`               | unset (OS vault)                | Optional path to an AES-256-GCM encrypted credential file (container/headless mode). When set, it takes priority over the OS vault; requires `FREEBOX_CREDENTIAL_PASSPHRASE_FILE`. |
 | `FREEBOX_CREDENTIAL_PASSPHRASE_FILE`    | unset                           | Path to the file containing the passphrase used by PBKDF2-SHA256 (with per-file random salt) to derive the AES-256 key for `FREEBOX_CREDENTIAL_FILE`.                              |
 
@@ -98,12 +69,14 @@ returned; host identifiers are SHA-256 hashes.
 ## Pairing
 
 1. `freebox_pairing_status` → state (`Missing` on first run).
-2. `freebox_pairing_initiate` (only with `FREEBOX_ALLOW_PAIRING_INITIATION=1|true|TRUE`) → the Freebox asks for
-   **physical approval on its display**.
-3. Approve on the Freebox, then `freebox_pairing_wait` (optionally `pollIntervalSeconds` and `timeoutSeconds`) →
+2. Startup bootstrap (`FREEBOX_AUTHENTICATE_ON_STARTUP=true`) automatically initiates pairing when no valid token is
+   available and waits for **physical approval on the Freebox display**.
+3. `freebox_pairing_initiate` can still be used manually, but it remains gated by
+   `FREEBOX_ALLOW_PAIRING_INITIATION=1|true|TRUE`.
+4. Approve on the Freebox, then `freebox_pairing_wait` (optionally `pollIntervalSeconds` and `timeoutSeconds`) →
    `Approved`; the app token is stored encrypted in the OS
    credential vault.
-4. Read-only tools (`freebox_connection_status`, `freebox_lan_overview`, `freebox_wifi_status`,
+5. Read-only tools (`freebox_connection_status`, `freebox_lan_overview`, `freebox_wifi_status`,
    `freebox_system_status`) now work.
 
 The server intentionally has no CLI side-channel. Pairing and credential bootstrap are handled only through MCP tools
@@ -135,6 +108,9 @@ dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
 # NuGet package (DotnetTool + McpServer, embeds .mcp/server.json and this README)
 dotnet pack mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -c Release   # -> .artifacts/package
 ```
+
+CI/CD release automation (binaries, NuGet package, containers, SBOM, checksums):
+[.github/workflows/release.yml](../../.github/workflows/release.yml)
 
 `PublishAot`, single-file publishing, and invariant globalization are already set in the
 project. Keep warnings from the AOT/trimming/single-file analyzers enabled, and smoke-test

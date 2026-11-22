@@ -1,11 +1,18 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Downloads;
 
 [McpServerToolType]
-public sealed class FreeboxDownloadsTools(IFreeboxClient client)
+public sealed partial class FreeboxDownloadsTools(
+    IFreeboxClient client,
+    ILogger<FreeboxDownloadsTools>? logger = null)
 {
     private const int MaxDownloads = 128;
     private const int MaxFiles = 512;
     private const int MaxTextLength = 4096;
+
+    private readonly ILogger<FreeboxDownloadsTools> _logger =
+        logger ?? NullLogger<FreeboxDownloadsTools>.Instance;
 
     [McpServerTool(Name = "freebox_downloads_list", Title = "List Freebox downloads", ReadOnly = true,
         Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
@@ -14,6 +21,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         "Returns a bounded sanitized list of Freebox download tasks; paths, hashes, credentials, and passwords are excluded.")]
     public async Task<DownloadsToolResult> ListAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_downloads_list");
         try
         {
             ObjectOrArray<Download> result =
@@ -25,10 +33,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
                     : Array.Empty<Download>();
 
             DownloadToolResult[] mapped = [.. downloads.Take(MaxDownloads).Select(MapDownload)];
+            LogToolSucceeded(_logger, "freebox_downloads_list", mapped.Length);
             return new DownloadsToolResult(mapped);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_downloads_list", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -43,6 +53,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         long id,
         CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_status");
         if (id <= 0)
         {
             throw new InvalidOperationException("InvalidRequest: id must be > 0.");
@@ -51,10 +62,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         try
         {
             Download download = await client.Files.Downloads.GetAsync(id, cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_download_status", 1);
             return MapDownload(download);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_status", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -65,10 +78,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
     [Description("Returns aggregate Freebox download and RSS task counts and transfer rates.")]
     public async Task<DownloadStatsToolResult> GetStatsAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_stats");
         try
         {
             DownloadStats stats =
                 await client.Files.Downloads.GetStatisticsAsync(cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_download_stats", stats.NbTasks);
             return new DownloadStatsToolResult(
                 stats.NbTasks, stats.NbTasksStopped, stats.NbTasksChecking, stats.NbTasksQueued,
                 stats.NbTasksExtracting, stats.NbTasksDone, stats.NbTasksRepairing, stats.NbTasksSeeding,
@@ -79,6 +94,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_stats", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -90,6 +106,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         "Returns bounded sanitized download configuration state; watch and download directories are excluded.")]
     public async Task<DownloadConfigurationToolResult> GetConfigurationAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_configuration");
         try
         {
             DownloadConfiguration configuration =
@@ -103,6 +120,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_configuration", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -117,6 +135,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         long id,
         CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_files");
         if (id <= 0)
         {
             throw new InvalidOperationException("InvalidRequest: id must be > 0.");
@@ -139,10 +158,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
                         Safe.Text(file.Error, 128),
                         Safe.Text(file.Priority, 32)))
             ];
+            LogToolSucceeded(_logger, "freebox_download_files", mapped.Length);
             return new DownloadFilesToolResult(mapped);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_files", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -156,6 +177,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         long id,
         CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_log");
         if (id <= 0)
         {
             throw new InvalidOperationException("InvalidRequest: id must be > 0.");
@@ -164,10 +186,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         try
         {
             string log = await client.Files.Downloads.GetLogAsync(id, cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_download_log", log.Length);
             return new DownloadLogToolResult(Safe.Text(log, MaxTextLength));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_log", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -181,6 +205,7 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         long id,
         CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_download_pieces");
         if (id <= 0)
         {
             throw new InvalidOperationException("InvalidRequest: id must be > 0.");
@@ -189,10 +214,12 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
         try
         {
             string pieces = await client.Files.Downloads.GetPiecesAsync(id, cancellationToken).ConfigureAwait(false);
+            LogToolSucceeded(_logger, "freebox_download_pieces", pieces.Length);
             return new DownloadPiecesToolResult(Safe.Text(pieces, MaxTextLength));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
+            LogToolFailed(_logger, "freebox_download_pieces", exception.Message);
             throw MapFailure(exception);
         }
     }
@@ -229,4 +256,14 @@ public sealed class FreeboxDownloadsTools(IFreeboxClient client)
             $"{error.Code}: {error.Message}",
             exception);
     }
+
+    [LoggerMessage(EventId = 1300, Level = LogLevel.Information, Message = "Executing {ToolName}.")]
+    private static partial void LogToolStarted(ILogger logger, string toolName);
+
+    [LoggerMessage(EventId = 1301, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (countOrLength={CountOrLength}).")]
+    private static partial void LogToolSucceeded(ILogger logger, string toolName, long? countOrLength);
+
+    [LoggerMessage(EventId = 1302, Level = LogLevel.Warning, Message = "{ToolName} failed: {ErrorMessage}")]
+    private static partial void LogToolFailed(ILogger logger, string toolName, string? errorMessage);
 }

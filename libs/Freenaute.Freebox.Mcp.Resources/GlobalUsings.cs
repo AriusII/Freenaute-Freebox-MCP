@@ -9,5 +9,6 @@ global using Freenaute.Freebox.Mcp.Resources.Documentation;
 global using Freenaute.Freebox.Mcp.Resources.Live;
 global using Freenaute.Freebox.Mcp.Resources.Models;
 global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
 global using ModelContextProtocol.Protocol;
 global using ModelContextProtocol.Server;

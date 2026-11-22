@@ -1,47 +1,51 @@
 # Freenaute.Freebox.Mcp.Resources
 
-MCP **resources** exposed by the server: embedded reference documentation (`freebox://docs/...`) and the live
-sanitized status snapshot (`freebox://live/status`). Targets `net11.0` / C# 15, `IsAotCompatible` + `IsTrimmable`,
-uses the .NET MCP SDK.
+`Freenaute.Freebox.Mcp.Resources` exposes documentation and live status resources to MCP clients.
 
-## Resources (`[McpServerResourceType]`)
+- Target: `net11.0`
+- AOT posture: compatible (`EmbeddedResource` docs + typed resource handlers)
+- Depends on: [Freenaute.Freebox.Mcp.Core](../Freenaute.Freebox.Mcp.Core/README.md)
 
-| URI                                            | Name                                         | Content                                                                             |
-|------------------------------------------------|----------------------------------------------|-------------------------------------------------------------------------------------|
-| `freebox://docs/en/overview`                   | `freebox-docs-en-overview`                   | English overview (capabilities, pairing workflow, safety rules) — LLM-facing.       |
-| `freebox://docs/en/resources`                  | `freebox-docs-en-resources`                  | English catalog of tools/resources with examples — LLM-facing.                      |
-| `freebox://docs/en/quickstart`                 | `freebox-docs-en-quickstart`                 | English quickstart workflow for MCP operations.                                     |
-| `freebox://docs/en/auth-pairing`               | `freebox-docs-en-auth-pairing`               | English authentication/pairing model mapped to MCP behavior.                        |
-| `freebox://docs/fr/overview`                   | `freebox-docs-fr-overview`                   | French overview.                                                                    |
-| `freebox://docs/fr/resources`                  | `freebox-docs-fr-resources`                  | French catalog.                                                                     |
-| `freebox://docs/fr/quickstart`                 | `freebox-docs-fr-quickstart`                 | Démarrage rapide en français.                                                       |
-| `freebox://docs/fr/authentification-appairage` | `freebox-docs-fr-authentification-appairage` | Authentification/appairage en français.                                             |
-| `freebox://live/status`                        | `freebox-live-status`                        | Current sanitized Freebox status as markdown (pairing / network / system sections). |
+## Resource inventory
 
-All are served as `text/markdown`.
+### Documentation resources (static markdown)
 
-## How the docs are embedded
+- `freebox://docs/en/overview`
+- `freebox://docs/en/resources`
+- `freebox://docs/en/quickstart`
+- `freebox://docs/en/auth-pairing`
+- `freebox://docs/en/tool-families`
+- `freebox://docs/fr/overview`
+- `freebox://docs/fr/resources`
+- `freebox://docs/fr/quickstart`
+- `freebox://docs/fr/authentification-appairage`
+- `freebox://docs/fr/tool-families`
 
-`Docs/**/*.md` are declared as `<EmbeddedResource>` in the `.csproj` and loaded by
-`Documentation/DocumentationStore.cs` from the assembly manifest resources
-(`Freenaute.Freebox.Mcp.Resources.Docs.en.overview.md`, ...). Lookups are **case-insensitive**; each document is
-bounded to **64 KiB** (truncated with a marker if larger — enforced by `DocumentationTests`). The markdown files are
-written for an LLM consumer: they describe capabilities, the pairing workflow, safety rules, limits, and example
-queries, because they are injected into the model context when the client reads the resource.
+Source files are in:
 
-## Live resource
+- [Docs/en](./Docs/en)
+- [Docs/fr](./Docs/fr)
 
-`Live/LiveResources.cs` reads `freebox://live/status` through the `IFreeboxLiveResourceSource` abstraction (10 s
-timeout, cancellation propagated, output truncated at 64 KiB, media type sanitized). The production
-implementation `OrchestratorFreeboxLiveResourceSource` aggregates the orchestrator's connection, network and system
-snapshots into a markdown report with bounded counts and sanitized tokens (alphanumerics + `_-.`, max 32 chars).
-Register it with `AddProductionFreeboxLiveResourceSource()` or substitute your own via
-`AddFreeboxLiveResourceSource(...)`
-— see `DependencyInjection/ResourceServiceCollectionExtensions.cs` (`AddFreeboxResources()` registers both resource
-types with the MCP server builder).
+### Live resource
 
-## Dependencies
+- `freebox://live/status`
 
-- Project: `Freenaute.Freebox.Mcp.Core` (orchestrator abstractions for the live source).
-- Runtime dependencies are centralized in `Freenaute.Freebox.Mcp.Core` (including shared MCP/hosting packages via
-  transitive references).
+Generated through:
+
+- [OrchestratorFreeboxLiveResourceSource](./Live/OrchestratorFreeboxLiveResourceSource.cs)
+
+## Design
+
+- Static docs are embedded and served as markdown.
+- Live status merges sanitized snapshots from Core orchestration.
+- Resource reads are bounded and timeout-aware.
+
+## Registration
+
+Resource registration entry point:
+
+- [ResourceServiceCollectionExtensions](./DependencyInjection/ResourceServiceCollectionExtensions.cs)
+
+Production live source registration:
+
+- `AddProductionFreeboxLiveResourceSource()`

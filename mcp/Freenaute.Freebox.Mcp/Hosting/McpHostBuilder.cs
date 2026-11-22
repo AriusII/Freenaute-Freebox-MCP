@@ -1,6 +1,6 @@
 namespace Freenaute.Freebox.Mcp.Hosting;
 
-internal static class McpHostBuilder
+internal static partial class McpHostBuilder
 {
     public static IHost Build(McpStartupOptions startupOptions)
     {
@@ -12,6 +12,22 @@ internal static class McpHostBuilder
         builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
         builder.Services.AddFreenauteFreeboxMcp(startupOptions);
 
-        return builder.Build();
+        IHost host = builder.Build();
+        ILogger logger = host.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Freenaute.Freebox.Mcp.Startup");
+        LogHostBuilt(logger, startupOptions.AuthenticateOnStartup, startupOptions.AllowPairingInitiation,
+            startupOptions.CredentialProfile);
+        return host;
     }
+
+    [LoggerMessage(
+        EventId = 5000,
+        Level = LogLevel.Information,
+        Message =
+            "MCP host built (authenticateOnStartup={AuthenticateOnStartup}, allowToolPairingInitiation={AllowPairingInitiation}, credentialProfile={CredentialProfile}).")]
+    private static partial void LogHostBuilt(
+        ILogger logger,
+        bool? authenticateOnStartup,
+        bool allowPairingInitiation,
+        string credentialProfile);
 }

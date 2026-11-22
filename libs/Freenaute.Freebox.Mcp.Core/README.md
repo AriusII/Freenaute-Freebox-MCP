@@ -28,6 +28,9 @@ orchestration, error mapping, credential-store abstraction, and secret redaction
 - **`Orchestration/FreeboxErrorMapper.cs`** — maps exceptions to stable `FreeboxCoreErrorCode`s (`Cancelled`,
   `InvalidRequest`, `AuthenticationRequired`, `AuthorizationPending/Denied/Expired`, `ApiRejected`,
   `TransportFailure`, `CredentialStoreUnavailable`, `Unknown`) with redacted messages.
+- **`Http/FreeboxAuthorizeTrackPathRewriteFilter.cs`** — normalizes authorization tracking requests by rewriting
+  `GET /api/v*/login/authorize/{track_id}/` to `GET /api/v*/login/authorize/{track_id}` before send, to match
+  Freebox API endpoint expectations and avoid stale-track false negatives.
 - **`Security/FreeboxSecretRedactor.cs`** — redacts `app_token`, `track_id`, `session_token`, `challenge`, `password`,
   `authorization`, `cookie` from any text (JSON / assignment forms, case-insensitive).
 - **`Results/`** — immutable snapshot/result records (`FreeboxDiscoverySnapshot`, `FreeboxNetworkSnapshot`,

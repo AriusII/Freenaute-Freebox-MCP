@@ -1,10 +1,17 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Notifications;
 
 [McpServerToolType]
-public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
+public sealed partial class FreeboxNotificationTools(
+    IFreeboxOrchestrator orchestrator,
+    ILogger<FreeboxNotificationTools>? logger = null)
 {
     private const int MaxStatusEntries = 8;
     private const int MaxNotifications = 16;
+
+    private readonly ILogger<FreeboxNotificationTools> _logger =
+        logger ?? NullLogger<FreeboxNotificationTools>.Instance;
 
     [McpServerTool(Name = "freebox_status_feed", Title = "Get Freebox status feed", ReadOnly = true,
         Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
@@ -12,6 +19,7 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
     [Description("Returns a bounded, sanitized status feed for pairing, connectivity, Wi-Fi, and system health.")]
     public async Task<StatusFeedToolResult> GetStatusFeedAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_status_feed");
         Task<FreeboxCoreResult<FreeboxConnectionResult>> connectionTask =
             orchestrator.GetConnectionStatusAsync(cancellationToken).AsTask();
         Task<FreeboxCoreResult<FreeboxNetworkSnapshot>> networkTask =
@@ -24,18 +32,21 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
         FreeboxCoreResult<FreeboxConnectionResult> connectionResult = await connectionTask.ConfigureAwait(false);
         if (!connectionResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_status_feed", connectionResult.Error?.Code);
             return ToolResultFactory.Failure<StatusFeedToolResult>(connectionResult.Error!);
         }
 
         FreeboxCoreResult<FreeboxNetworkSnapshot> networkResult = await networkTask.ConfigureAwait(false);
         if (!networkResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_status_feed", networkResult.Error?.Code);
             return ToolResultFactory.Failure<StatusFeedToolResult>(networkResult.Error!);
         }
 
         FreeboxCoreResult<FreeboxSystemSnapshot> systemResult = await systemTask.ConfigureAwait(false);
         if (!systemResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_status_feed", systemResult.Error?.Code);
             return ToolResultFactory.Failure<StatusFeedToolResult>(systemResult.Error!);
         }
 
@@ -57,6 +68,7 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
                 $"disk={Safe.Text(system.DiskStatus, 32)}; uptime_seconds={system.UptimeSeconds}")
         ];
 
+        LogToolSucceeded(_logger, "freebox_status_feed", entries.Length);
         return new StatusFeedToolResult(
             DateTimeOffset.UtcNow,
             [.. entries.Take(MaxStatusEntries)]);
@@ -68,6 +80,7 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
     [Description("Returns actionable bounded notifications derived from current sanitized Freebox status.")]
     public async Task<NotificationFeedToolResult> GetNotificationsFeedAsync(CancellationToken cancellationToken)
     {
+        LogToolStarted(_logger, "freebox_notifications_feed");
         Task<FreeboxCoreResult<FreeboxConnectionResult>> connectionTask =
             orchestrator.GetConnectionStatusAsync(cancellationToken).AsTask();
         Task<FreeboxCoreResult<FreeboxNetworkSnapshot>> networkTask =
@@ -80,18 +93,21 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
         FreeboxCoreResult<FreeboxConnectionResult> connectionResult = await connectionTask.ConfigureAwait(false);
         if (!connectionResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_notifications_feed", connectionResult.Error?.Code);
             return ToolResultFactory.Failure<NotificationFeedToolResult>(connectionResult.Error!);
         }
 
         FreeboxCoreResult<FreeboxNetworkSnapshot> networkResult = await networkTask.ConfigureAwait(false);
         if (!networkResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_notifications_feed", networkResult.Error?.Code);
             return ToolResultFactory.Failure<NotificationFeedToolResult>(networkResult.Error!);
         }
 
         FreeboxCoreResult<FreeboxSystemSnapshot> systemResult = await systemTask.ConfigureAwait(false);
         if (!systemResult.IsSuccess)
         {
+            LogToolFailed(_logger, "freebox_notifications_feed", systemResult.Error?.Code);
             return ToolResultFactory.Failure<NotificationFeedToolResult>(systemResult.Error!);
         }
 
@@ -136,6 +152,7 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
             notifications.Add(Notification("all_clear", "info", "ALL_CLEAR", "No actionable notifications."));
         }
 
+        LogToolSucceeded(_logger, "freebox_notifications_feed", notifications.Count);
         return new NotificationFeedToolResult(
             DateTimeOffset.UtcNow,
             [.. notifications.Take(MaxNotifications)]);
@@ -193,4 +210,14 @@ public sealed class FreeboxNotificationTools(IFreeboxOrchestrator orchestrator)
     {
         return hosts.Values.Sum(items => items.Length);
     }
+
+    [LoggerMessage(EventId = 1900, Level = LogLevel.Information, Message = "Executing {ToolName}.")]
+    private static partial void LogToolStarted(ILogger logger, string toolName);
+
+    [LoggerMessage(EventId = 1901, Level = LogLevel.Warning, Message = "{ToolName} failed: {ErrorCode}")]
+    private static partial void LogToolFailed(ILogger logger, string toolName, FreeboxCoreErrorCode? errorCode);
+
+    [LoggerMessage(EventId = 1902, Level = LogLevel.Information,
+        Message = "{ToolName} succeeded (itemCount={ItemCount}).")]
+    private static partial void LogToolSucceeded(ILogger logger, string toolName, int itemCount);
 }

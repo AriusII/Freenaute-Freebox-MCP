@@ -25,11 +25,9 @@ global using Freenaute.Freebox.Mcp.Tools.Network;
 global using Freenaute.Freebox.Mcp.Tools.Notifications;
 global using Freenaute.Freebox.Mcp.Tools.Parental;
 global using Freenaute.Freebox.Mcp.Tools.Pairing;
+global using Freenaute.Freebox.Mcp.Tools.Serialization;
 global using Freenaute.Freebox.Mcp.Tools.System;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 global using ModelContextProtocol.Protocol;
-global using JsonSerializerOptions = System.Text.Json.JsonSerializerOptions;
-global using ToolResultJsonSerializerContext =
-    Freenaute.Freebox.Mcp.Tools.Serialization.ToolResultJsonSerializerContext;

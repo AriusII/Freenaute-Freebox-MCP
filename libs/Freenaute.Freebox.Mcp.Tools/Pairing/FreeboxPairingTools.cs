@@ -1,8 +1,15 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Freenaute.Freebox.Mcp.Tools.Pairing;
 
 [McpServerToolType]
-public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
+public sealed partial class FreeboxPairingTools(
+    IFreeboxOrchestrator orchestrator,
+    ILogger<FreeboxPairingTools>? logger = null)
 {
+    private readonly ILogger<FreeboxPairingTools> _logger =
+        logger ?? NullLogger<FreeboxPairingTools>.Instance;
+
     [McpServerTool(Name = "freebox_pairing_status", Title = "Get Freebox pairing status", ReadOnly = true,
         Idempotent = true, Destructive = false, OpenWorld = true, UseStructuredContent = true,
         OutputSchemaType = typeof(PairingStatusToolResult))]
@@ -10,8 +17,18 @@ public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
         "Reports durable credential state without exposing credentials. It does not initiate or poll pairing.")]
     public async Task<PairingStatusToolResult> GetStatusAsync(CancellationToken cancellationToken)
     {
+        LogPairingStatusStarted(_logger);
         FreeboxCoreResult<FreeboxConnectionResult> result =
             await orchestrator.GetConnectionStatusAsync(cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            LogPairingStatusFailed(_logger, result.Error?.Code);
+        }
+        else
+        {
+            LogPairingStatusSucceeded(_logger, result.Value?.CredentialState);
+        }
+
         return result.IsSuccess
             ? new PairingStatusToolResult(
                 result.Value!.CredentialStoreAvailable,
@@ -25,8 +42,18 @@ public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
     [Description("Starts pairing only when explicitly enabled by host policy. Physical approval is still required.")]
     public async Task<PairingInitiationToolResult> InitiateAsync(CancellationToken cancellationToken)
     {
+        LogPairingInitiateStarted(_logger);
         FreeboxCoreResult<FreeboxPairingResult> result =
             await orchestrator.BeginPairingAsync(cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            LogPairingInitiateFailed(_logger, result.Error?.Code);
+        }
+        else
+        {
+            LogPairingInitiateSucceeded(_logger, result.Value?.State);
+        }
+
         return result.IsSuccess
             ? new PairingInitiationToolResult(true, result.Value!.State.ToString(),
                 result.Value.State == FreeboxCredentialState.Approved
@@ -68,8 +95,18 @@ public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
             ? null
             : TimeSpan.FromSeconds(timeoutSeconds.Value);
 
+        LogPairingWaitStarted(_logger, pollIntervalSeconds, timeoutSeconds);
         FreeboxCoreResult<FreeboxCredentialResult> result =
             await orchestrator.WaitForApprovalAsync(pollInterval, timeout, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            LogPairingWaitFailed(_logger, result.Error?.Code);
+        }
+        else
+        {
+            LogPairingWaitSucceeded(_logger, result.Value?.State);
+        }
+
         return result.IsSuccess
             ? new PairingApprovalToolResult(
                 result.Value!.State == FreeboxCredentialState.Approved,
@@ -79,4 +116,36 @@ public sealed class FreeboxPairingTools(IFreeboxOrchestrator orchestrator)
                     : $"Pairing ended with state '{result.Value.State}'.")
             : ToolResultFactory.Failure<PairingApprovalToolResult>(result.Error!);
     }
+
+    [LoggerMessage(EventId = 1200, Level = LogLevel.Information, Message = "Executing freebox_pairing_status.")]
+    private static partial void LogPairingStatusStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 1201, Level = LogLevel.Warning, Message = "freebox_pairing_status failed: {ErrorCode}")]
+    private static partial void LogPairingStatusFailed(ILogger logger, FreeboxCoreErrorCode? errorCode);
+
+    [LoggerMessage(EventId = 1202, Level = LogLevel.Information,
+        Message = "freebox_pairing_status succeeded (state={CredentialState}).")]
+    private static partial void LogPairingStatusSucceeded(ILogger logger, FreeboxCredentialState? credentialState);
+
+    [LoggerMessage(EventId = 1210, Level = LogLevel.Information, Message = "Executing freebox_pairing_initiate.")]
+    private static partial void LogPairingInitiateStarted(ILogger logger);
+
+    [LoggerMessage(EventId = 1211, Level = LogLevel.Warning, Message = "freebox_pairing_initiate failed: {ErrorCode}")]
+    private static partial void LogPairingInitiateFailed(ILogger logger, FreeboxCoreErrorCode? errorCode);
+
+    [LoggerMessage(EventId = 1212, Level = LogLevel.Information,
+        Message = "freebox_pairing_initiate succeeded (state={CredentialState}).")]
+    private static partial void LogPairingInitiateSucceeded(ILogger logger, FreeboxCredentialState? credentialState);
+
+    [LoggerMessage(EventId = 1220, Level = LogLevel.Information,
+        Message =
+            "Executing freebox_pairing_wait (pollSeconds={PollIntervalSeconds}, timeoutSeconds={TimeoutSeconds}).")]
+    private static partial void LogPairingWaitStarted(ILogger logger, int? pollIntervalSeconds, int? timeoutSeconds);
+
+    [LoggerMessage(EventId = 1221, Level = LogLevel.Warning, Message = "freebox_pairing_wait failed: {ErrorCode}")]
+    private static partial void LogPairingWaitFailed(ILogger logger, FreeboxCoreErrorCode? errorCode);
+
+    [LoggerMessage(EventId = 1222, Level = LogLevel.Information,
+        Message = "freebox_pairing_wait completed (state={CredentialState}).")]
+    private static partial void LogPairingWaitSucceeded(ILogger logger, FreeboxCredentialState? credentialState);
 }

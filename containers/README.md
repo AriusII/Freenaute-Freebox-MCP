@@ -1,75 +1,75 @@
-# Container images — Freenaute-Freebox-MCP
+# Containers (Windows + Linux, x64 + ARM64)
 
-This repository now uses **specialized Dockerfiles per OS and architecture**:
+This repository ships **four architecture-specific Dockerfiles**:
 
-- `containers/linux/x64/Dockerfile` → `linux-x64`
-- `containers/linux/arm/Dockerfile` → `linux-arm64`
-- `containers/windows/x64/Dockerfile` → `win-x64`
-- `containers/windows/arm/Dockerfile` → `win-arm64`
+- [containers/linux/x64/Dockerfile](./linux/x64/Dockerfile) → `linux/amd64`
+- [containers/linux/arm/Dockerfile](./linux/arm/Dockerfile) → `linux/arm64`
+- [containers/windows/x64/Dockerfile](./windows/x64/Dockerfile) → `windows/amd64`
+- [containers/windows/arm/Dockerfile](./windows/arm/Dockerfile) → `windows/arm64`
 
-The MCP server remains local/stdin-stdout only (no HTTP port).
+All images build the MCP host as **Native AOT**, **self-contained**, **single-file**.
 
-## Build locally
+## Build arguments
 
-Linux x64:
+Each Dockerfile accepts:
+
+- `VERSION` (default `0.1.0-beta`)
+- `BUILD_CONFIGURATION` (default `Release`)
+- `SOURCE_REPOSITORY` (OCI source label)
+
+## Local builds
 
 ```powershell
+# Linux amd64
 docker build -f containers/linux/x64/Dockerfile -t freenaute-freebox-mcp:linux-amd64 .
-```
 
-Linux ARM64:
-
-```powershell
+# Linux arm64
 docker build -f containers/linux/arm/Dockerfile -t freenaute-freebox-mcp:linux-arm64 .
-```
 
-Windows x64:
-
-```powershell
+# Windows amd64
 docker build -f containers/windows/x64/Dockerfile -t freenaute-freebox-mcp:windows-amd64 .
-```
 
-Windows ARM64:
-
-```powershell
+# Windows arm64
 docker build -f containers/windows/arm/Dockerfile -t freenaute-freebox-mcp:windows-arm64 .
 ```
 
-## Run
+## Runtime
+
+The MCP transport is stdio. Run containers attached with `-i` (no port publishing required):
 
 ```powershell
-docker run -i --rm freenaute-freebox-mcp:linux-amd64
+docker run --rm -i freenaute-freebox-mcp:linux-amd64
 ```
 
-Use `-i` (stdio MCP protocol). Do not publish ports.
+## CI/CD publishing model
 
-## CI/CD container flow
+[release.yml](../.github/workflows/release.yml) pushes:
 
-The release workflow:
+- Linux image tags:
+  - `ghcr.io/<owner>/<repo>:<version>-linux-amd64`
+  - `ghcr.io/<owner>/<repo>:<version>-linux-arm64`
+  - compatibility aliases `:linux-amd64`, `:linux-arm64`
+- Linux multi-arch manifests:
+  - `ghcr.io/<owner>/<repo>:<version>`
+  - `ghcr.io/<owner>/<repo>:latest`
+- Windows image tags:
+  - `ghcr.io/<owner>/<repo>:<version>-windows-amd64`
+  - `ghcr.io/<owner>/<repo>:<version>-windows-arm64`
+  - compatibility aliases `:windows-amd64`, `:windows-arm64`
 
-1. Builds and pushes:
-    - `ghcr.io/<owner>/<repo>:linux-amd64`
-    - `ghcr.io/<owner>/<repo>:linux-arm64`
-    - `ghcr.io/<owner>/<repo>:windows-amd64`
-    - `ghcr.io/<owner>/<repo>:windows-arm64`
-2. Creates/pushes Linux multi-arch manifests:
-    - `ghcr.io/<owner>/<repo>:<version>`
-    - `ghcr.io/<owner>/<repo>:latest`
-      (both include linux amd64 + arm64)
+## Policy validation
 
-## Validation
-
-Static rules are enforced by:
+No local Docker daemon is required for policy checks:
 
 ```powershell
 dotnet msbuild -t:ValidateContainers
 ```
 
-Validation checks include:
+The validation target (in [Directory.Build.targets](../Directory.Build.targets)) enforces:
 
 - all 4 Dockerfiles exist
 - MCR base images only
-- Native AOT publish flags
-- Linux non-root user (`USER 1654`)
-- architecture-specific RID markers
-- no secret-like `ENV`/`ARG` lines
+- explicit Native AOT publish settings
+- Linux non-root runtime user (`USER 1654`)
+- architecture/RID markers per Dockerfile
+- no secret-like build arguments or environment values

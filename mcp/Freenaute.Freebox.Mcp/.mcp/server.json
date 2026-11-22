@@ -11,73 +11,7 @@
       "version": "0.1.0-beta",
       "transport": {
         "type": "stdio"
-      },
-      "packageArguments": [],
-      "environmentVariables": [
-        {
-          "name": "FREEBOX_APPLICATION_ID",
-          "description": "Freebox application identifier registered during pairing; defaults to org.freenaute.freebox-mcp.",
-          "isRequired": false,
-          "default": "org.freenaute.freebox-mcp"
-        },
-        {
-          "name": "FREEBOX_APPLICATION_NAME",
-          "description": "Display name presented on the Freebox during pairing.",
-          "isRequired": false,
-          "default": "Freenaute Freebox MCP"
-        },
-        {
-          "name": "FREEBOX_DEVICE_NAME",
-          "description": "Client device name presented on the Freebox during pairing; defaults to the machine name.",
-          "isRequired": false
-        },
-        {
-          "name": "FREEBOX_CREDENTIAL_PROFILE",
-          "description": "Credential profile name; defaults to 'default'.",
-          "isRequired": false,
-          "default": "default"
-        },
-        {
-          "name": "FREEBOX_ALLOW_PAIRING_INITIATION",
-          "description": "Opt-in policy switch. Pairing initiation is allowed only when set exactly to '1', 'true', or 'TRUE'.",
-          "isRequired": false,
-          "default": "false"
-        },
-        {
-          "name": "FREEBOX_SERVER_ADDRESS",
-          "description": "Freebox server base address passed to the Freebox client.",
-          "isRequired": false,
-          "default": "https://mafreebox.freebox.fr/"
-        },
-        {
-          "name": "FREEBOX_PAIRING_POLL_INTERVAL_SECONDS",
-          "description": "Optional polling interval (seconds) used by freebox_pairing_wait when no explicit value is provided.",
-          "isRequired": false,
-          "default": "2"
-        },
-        {
-          "name": "FREEBOX_PAIRING_WAIT_TIMEOUT_SECONDS",
-          "description": "Optional timeout (seconds) used by freebox_pairing_wait when no explicit value is provided.",
-          "isRequired": false,
-          "default": "600"
-        },
-        {
-          "name": "FREEBOX_AUTHENTICATE_ON_STARTUP",
-          "description": "Enable automatic startup authentication bootstrap using persisted credentials and optional pairing policy.",
-          "isRequired": false,
-          "default": "true"
-        },
-        {
-          "name": "FREEBOX_CREDENTIAL_FILE",
-          "description": "Optional path to an AES-256-GCM encrypted credential file (container/headless mode). When set, it takes priority over the OS vault and FREEBOX_CREDENTIAL_PASSPHRASE_FILE must point to the passphrase file.",
-          "isRequired": false
-        },
-        {
-          "name": "FREEBOX_CREDENTIAL_PASSPHRASE_FILE",
-          "description": "Path to the file containing the passphrase used to derive the AES-256 key for FREEBOX_CREDENTIAL_FILE.",
-          "isRequired": false
-        }
-      ]
+      }
     }
   ],
   "repository": {

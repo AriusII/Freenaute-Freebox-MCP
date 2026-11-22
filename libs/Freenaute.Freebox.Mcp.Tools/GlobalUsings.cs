@@ -32,5 +32,7 @@ global using Freenaute.Freebox.Mcp.Tools.Contacts;
 global using Freenaute.Freebox.Mcp.Tools.AirMedia;
 global using Freenaute.Freebox.Mcp.Tools.Shares;
 global using Freenaute.Freebox.Mcp.Tools.Pairing;
+global using Freenaute.Freebox.Mcp.Tools.Parental;
 global using Freenaute.Freebox.Mcp.Tools.System;
+global using Microsoft.Extensions.Logging;
 global using ModelContextProtocol.Server;

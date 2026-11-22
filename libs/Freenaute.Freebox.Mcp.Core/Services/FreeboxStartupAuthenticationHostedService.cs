@@ -10,7 +10,26 @@ public sealed partial class FreeboxStartupAuthenticationHostedService(
     private readonly IFreeboxStartupAuthenticationService _startupAuthenticationService =
         startupAuthenticationService ?? throw new ArgumentNullException(nameof(startupAuthenticationService));
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    private CancellationTokenSource? _startupCts;
+    private Task? _startupTask;
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        _startupCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _startupTask = RunStartupBootstrapAsync(_startupCts.Token);
+        return Task.CompletedTask;
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _startupCts?.Cancel();
+        if (_startupTask is not null)
+        {
+            await _startupTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RunStartupBootstrapAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -18,17 +37,12 @@ public sealed partial class FreeboxStartupAuthenticationHostedService(
         }
         catch (OperationCanceledException)
         {
-            throw;
+            // Graceful shutdown or startup cancellation.
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             LogStartupAuthenticationBootstrapFailed(_logger, exception);
         }
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
     }
 
     [LoggerMessage(
