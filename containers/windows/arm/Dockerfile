@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# escape=`
 
 ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:11.0.100-nanoserver-ltsc2025
 ARG TOOLCHAIN_IMAGE=mcr.microsoft.com/windows/servercore:ltsc2025-arm64
