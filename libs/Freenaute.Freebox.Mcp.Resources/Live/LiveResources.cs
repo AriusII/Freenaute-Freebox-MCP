@@ -20,6 +20,46 @@ public sealed partial class LiveResources(
     {
         LogLiveResourceReadStarted(_logger);
         (string content, string? mediaType) = await ReadSourceAsync(cancellationToken).ConfigureAwait(false);
+        return FormatLiveResource("freebox://live/status", content, mediaType);
+    }
+
+    [McpServerResource(UriTemplate = "freebox://live/network-advanced", Name = "freebox-live-network-advanced", Title = "Advanced live network summary", MimeType = "text/markdown")]
+    public async ValueTask<TextResourceContents> GetNetworkAdvancedAsync(CancellationToken cancellationToken) =>
+        await GetDomainLiveResourceAsync("freebox://live/network-advanced", "# Freebox advanced network summary", cancellationToken).ConfigureAwait(false);
+
+    [McpServerResource(UriTemplate = "freebox://live/files-advanced", Name = "freebox-live-files-advanced", Title = "Advanced live files summary", MimeType = "text/markdown")]
+    public async ValueTask<TextResourceContents> GetFilesAdvancedAsync(CancellationToken cancellationToken) =>
+        await GetDomainLiveResourceAsync("freebox://live/files-advanced", "# Freebox advanced files summary", cancellationToken).ConfigureAwait(false);
+
+    [McpServerResource(UriTemplate = "freebox://live/systemhome-controls", Name = "freebox-live-systemhome-controls", Title = "Live System and home controls summary", MimeType = "text/markdown")]
+    public async ValueTask<TextResourceContents> GetSystemHomeControlsAsync(CancellationToken cancellationToken) =>
+        await GetDomainLiveResourceAsync("freebox://live/systemhome-controls", "# Freebox System and home controls summary", cancellationToken).ConfigureAwait(false);
+
+    [McpServerResource(UriTemplate = "freebox://live/services-controls", Name = "freebox-live-services-controls", Title = "Live services controls summary", MimeType = "text/markdown")]
+    public async ValueTask<TextResourceContents> GetServicesControlsAsync(CancellationToken cancellationToken) =>
+        await GetDomainLiveResourceAsync("freebox://live/services-controls", "# Freebox services controls summary", cancellationToken).ConfigureAwait(false);
+
+    [McpServerResource(UriTemplate = "freebox://live/parental-write", Name = "freebox-live-parental-write", Title = "Live parental controls write summary", MimeType = "text/markdown")]
+    public async ValueTask<TextResourceContents> GetParentalWriteAsync(CancellationToken cancellationToken) =>
+        await GetDomainLiveResourceAsync("freebox://live/parental-write", "# Freebox parental controls write summary", cancellationToken).ConfigureAwait(false);
+
+    private async ValueTask<TextResourceContents> GetDomainLiveResourceAsync(
+        string uri,
+        string fallbackTitle,
+        CancellationToken cancellationToken)
+    {
+        LogLiveResourceReadStarted(_logger);
+        (string content, string? mediaType) = await ReadSourceAsync(cancellationToken).ConfigureAwait(false);
+        if (content.Contains("Live data is unavailable", StringComparison.Ordinal))
+        {
+            content = $"{fallbackTitle}\n\n{content[(content.IndexOf('\n') + 1)..].TrimStart()}";
+        }
+
+        return FormatLiveResource(uri, content, mediaType);
+    }
+
+    private TextResourceContents FormatLiveResource(string uri, string content, string? mediaType)
+    {
         string sanitized = Sanitize(content);
         bool truncated = sanitized.Length > MaxCharacters;
         string bounded = truncated ? sanitized[..MaxCharacters] : sanitized;
@@ -31,7 +71,7 @@ public sealed partial class LiveResources(
         LogLiveResourceReadSucceeded(_logger, bounded.Length, truncated);
         return new TextResourceContents
         {
-            Uri = "freebox://live/status",
+            Uri = uri,
             MimeType = mediaType is null ? "text/markdown" : NormalizeMediaType(mediaType),
             Text = bounded
         };

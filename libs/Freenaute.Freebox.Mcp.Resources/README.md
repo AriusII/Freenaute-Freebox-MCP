@@ -1,6 +1,6 @@
 # Freenaute.Freebox.Mcp.Resources
 
-`Freenaute.Freebox.Mcp.Resources` exposes documentation and live status resources to MCP clients.
+`Freenaute.Freebox.Mcp.Resources` exposes documentation and live resources to MCP clients.
 
 - Target: `net11.0`
 - AOT posture: compatible (`EmbeddedResource` docs + typed resource handlers)
@@ -20,6 +20,7 @@
 - `freebox://docs/fr/quickstart`
 - `freebox://docs/fr/authentification-appairage`
 - `freebox://docs/fr/tool-families`
+- Domain catalogs: the 10 `freebox://docs/{en|fr}/domain-*` and `domaine-*` URIs
 
 Source files are in:
 
@@ -29,6 +30,11 @@ Source files are in:
 ### Live resource
 
 - `freebox://live/status`
+- `freebox://live/network-advanced`
+- `freebox://live/files-advanced`
+- `freebox://live/systemhome-controls`
+- `freebox://live/services-controls`
+- `freebox://live/parental-write`
 
 Generated through:
 

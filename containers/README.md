@@ -13,7 +13,7 @@ All images build the MCP host as **Native AOT**, **self-contained**, **single-fi
 
 Each Dockerfile accepts:
 
-- `VERSION` (default `0.1.0-beta`)
+- `VERSION` (default `1.0.0`)
 - `BUILD_CONFIGURATION` (default `Release`)
 - `SOURCE_REPOSITORY` (OCI source label)
 

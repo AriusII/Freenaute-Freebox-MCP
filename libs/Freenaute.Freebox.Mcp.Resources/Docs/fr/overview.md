@@ -12,7 +12,7 @@ configuration générale de la Freebox.
 - stdio uniquement : JSON-RPC sur stdin/stdout ; les logs passent sur stderr. Aucun port TCP n'est ouvert.
 - .NET 11, binaire Native AOT single-file ; aussi distribué comme outil NuGet (`Freenaute.Freebox.Mcp`) exécutable via
   `dnx` ou `freenaute-freebox-mcp`.
-- Identité serveur : `Freenaute.Freebox.Mcp` (version `0.1.0-beta`) ; nom de package dans `.mcp/server.json` :
+- Identité serveur : `Freenaute.Freebox.Mcp` (version `1.0.0`) ; nom de package dans `.mcp/server.json` :
   `org.freenaute/freenaute-freebox-mcp`.
 
 ## Capacités

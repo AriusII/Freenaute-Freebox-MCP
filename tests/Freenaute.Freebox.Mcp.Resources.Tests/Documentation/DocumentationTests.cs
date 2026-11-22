@@ -13,7 +13,17 @@ public sealed class DocumentationTests
         "freebox://docs/fr/resources",
         "freebox://docs/fr/quickstart",
         "freebox://docs/fr/authentification-appairage",
-        "freebox://docs/fr/tool-families"
+        "freebox://docs/fr/tool-families",
+        "freebox://docs/en/domain-network-advanced",
+        "freebox://docs/en/domain-files-advanced",
+        "freebox://docs/en/domain-systemhome-controls",
+        "freebox://docs/en/domain-services-controls",
+        "freebox://docs/en/domain-parental-write",
+        "freebox://docs/fr/domaine-reseau-avance",
+        "freebox://docs/fr/domaine-fichiers-avances",
+        "freebox://docs/fr/domaine-systemhome-controles",
+        "freebox://docs/fr/domaine-services-controles",
+        "freebox://docs/fr/domaine-parental-ecriture"
     ];
 
     [Theory]
@@ -121,6 +131,26 @@ public sealed class DocumentationTests
         "freebox-docs-fr-authentification-appairage", "Authentification et appairage Freebox (français)")]
     [InlineData(nameof(DocumentationResources.FrenchToolFamilies), "freebox://docs/fr/tool-families",
         "freebox-docs-fr-tool-families", "Guide des familles d'outils MCP Freebox (français)")]
+    [InlineData(nameof(DocumentationResources.EnglishDomainNetworkAdvanced), "freebox://docs/en/domain-network-advanced",
+        "freebox-docs-en-domain-network-advanced", "Advanced network domain guide (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishDomainFilesAdvanced), "freebox://docs/en/domain-files-advanced",
+        "freebox-docs-en-domain-files-advanced", "Advanced files domain guide (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishDomainSystemHomeControls), "freebox://docs/en/domain-systemhome-controls",
+        "freebox-docs-en-domain-systemhome-controls", "System and home controls guide (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishDomainServicesControls), "freebox://docs/en/domain-services-controls",
+        "freebox-docs-en-domain-services-controls", "Services controls guide (English)")]
+    [InlineData(nameof(DocumentationResources.EnglishDomainParentalWrite), "freebox://docs/en/domain-parental-write",
+        "freebox-docs-en-domain-parental-write", "Parental controls write guide (English)")]
+    [InlineData(nameof(DocumentationResources.FrenchDomainReseauAvance), "freebox://docs/fr/domaine-reseau-avance",
+        "freebox-docs-fr-domaine-reseau-avance", "Guide avancé du domaine réseau (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchDomainFichiersAvances), "freebox://docs/fr/domaine-fichiers-avances",
+        "freebox-docs-fr-domaine-fichiers-avances", "Guide avancé du domaine fichiers (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchDomainSystemHomeControles), "freebox://docs/fr/domaine-systemhome-controles",
+        "freebox-docs-fr-domaine-systemhome-controles", "Guides des contrôles système et domicile (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchDomainServicesControles), "freebox://docs/fr/domaine-services-controles",
+        "freebox-docs-fr-domaine-services-controles", "Guide des contrôles de services (français)")]
+    [InlineData(nameof(DocumentationResources.FrenchDomainParentalEcriture), "freebox://docs/fr/domaine-parental-ecriture",
+        "freebox-docs-fr-domaine-parental-ecriture", "Guide d'écriture du contrôle parental (français)")]
     public void DocumentationMethod_ReturnsContentMatchingMetadata(string methodName, string uri, string name,
         string title)
     {

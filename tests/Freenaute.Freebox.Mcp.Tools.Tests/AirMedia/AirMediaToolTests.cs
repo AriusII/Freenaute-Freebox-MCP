@@ -84,6 +84,14 @@ public sealed class AirMediaToolTests
             throw new NotSupportedException();
         }
 
+        public Task SendToLegacyReceiverRouteAsync(
+            string receiverName,
+            AirMediaReceiverRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
         public FreeboxAirMediaReceiver Receiver(string receiverName)
         {
             throw new NotSupportedException();

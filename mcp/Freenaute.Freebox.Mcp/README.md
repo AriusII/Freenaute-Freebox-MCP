@@ -19,7 +19,7 @@ system/network status. Pairing always requires explicit **physical approval on t
 dotnet tool install --global Freenaute.Freebox.Mcp
 
 # or run without installing (dnx)
-dnx Freenaute.Freebox.Mcp --version 0.1.0-beta --yes
+dnx Freenaute.Freebox.Mcp --version 1.0.0 --yes
 ```
 
 ## Use from an MCP client
@@ -103,7 +103,7 @@ dotnet test Freenaute.Freebox.MCP.slnx -c Release
 # Native AOT single-file publish, one RID (win-x64|win-arm64|linux-x64|linux-arm64)
 dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
   -c Release -r win-x64 --self-contained true -p:PublishAot=true `
-  --output .artifacts/publish/0.1.0-beta/win-x64
+  --output .artifacts/publish/1.0.0/win-x64
 
 # NuGet package (DotnetTool + McpServer, embeds .mcp/server.json and this README)
 dotnet pack mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj -c Release   # -> .artifacts/package

@@ -9,7 +9,7 @@ read-only status** of the Freebox and its LAN/Wi-Fi. It cannot change Freebox co
 - stdio only: JSON-RPC on stdin/stdout; logs on stderr. No TCP port is opened.
 - .NET 11, Native AOT single-file; also distributed as a NuGet tool (`Freenaute.Freebox.Mcp`) runnable with `dnx`
   or `freenaute-freebox-mcp`.
-- Server identity: `Freenaute.Freebox.Mcp` (version `0.1.0-beta`); package name in `.mcp/server.json`:
+- Server identity: `Freenaute.Freebox.Mcp` (version `1.0.0`); package name in `.mcp/server.json`:
   `org.freenaute/freenaute-freebox-mcp`.
 
 ## Capabilities

@@ -7,7 +7,7 @@ ARG BASE_IMAGE=mcr.microsoft.com/windows/nanoserver:ltsc2025
 FROM ${SDK_IMAGE} AS sdk
 FROM ${TOOLCHAIN_IMAGE} AS build
 
-ARG VERSION=0.1.0-beta
+ARG VERSION=1.0.0
 ARG BUILD_CONFIGURATION=Release
 ENV RID=win-x64 `
     VERSION=$VERSION `
@@ -41,7 +41,7 @@ RUN dotnet restore mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj --runt
 
 FROM ${BASE_IMAGE} AS final
 
-ARG VERSION=0.1.0-beta
+ARG VERSION=1.0.0
 
 LABEL org.opencontainers.image.title="Freenaute Freebox MCP" `
       org.opencontainers.image.description="Local stdio MCP server for Freebox discovery, pairing coordination, and system/network status (C#/.NET 11 Native AOT, single file)." `

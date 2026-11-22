@@ -28,7 +28,7 @@
     <!-- Set recommended package metadata -->
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageId>Freenaute.Freebox.Mcp</PackageId>
-    <Version>0.1.0-beta</Version>
+    <Version>1.0.0</Version>
     <PackageVersion>$(Version)</PackageVersion>
     <PackageTags>AI; MCP; server; stdio</PackageTags>
     <Description>Local stdio MCP server for read-only Freebox discovery, pairing coordination, and system/network status.</Description>

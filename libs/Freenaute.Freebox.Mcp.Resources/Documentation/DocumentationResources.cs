@@ -53,6 +53,21 @@ public sealed class DocumentationResources
         return Get("freebox://docs/en/tool-families");
     }
 
+    [McpServerResource(UriTemplate = "freebox://docs/en/domain-network-advanced", Name = "freebox-docs-en-domain-network-advanced", Title = "Advanced network domain guide (English)", MimeType = "text/markdown")]
+    public static TextResourceContents EnglishDomainNetworkAdvanced() => Get("freebox://docs/en/domain-network-advanced");
+
+    [McpServerResource(UriTemplate = "freebox://docs/en/domain-files-advanced", Name = "freebox-docs-en-domain-files-advanced", Title = "Advanced files domain guide (English)", MimeType = "text/markdown")]
+    public static TextResourceContents EnglishDomainFilesAdvanced() => Get("freebox://docs/en/domain-files-advanced");
+
+    [McpServerResource(UriTemplate = "freebox://docs/en/domain-systemhome-controls", Name = "freebox-docs-en-domain-systemhome-controls", Title = "System and home controls guide (English)", MimeType = "text/markdown")]
+    public static TextResourceContents EnglishDomainSystemHomeControls() => Get("freebox://docs/en/domain-systemhome-controls");
+
+    [McpServerResource(UriTemplate = "freebox://docs/en/domain-services-controls", Name = "freebox-docs-en-domain-services-controls", Title = "Services controls guide (English)", MimeType = "text/markdown")]
+    public static TextResourceContents EnglishDomainServicesControls() => Get("freebox://docs/en/domain-services-controls");
+
+    [McpServerResource(UriTemplate = "freebox://docs/en/domain-parental-write", Name = "freebox-docs-en-domain-parental-write", Title = "Parental controls write guide (English)", MimeType = "text/markdown")]
+    public static TextResourceContents EnglishDomainParentalWrite() => Get("freebox://docs/en/domain-parental-write");
+
     [McpServerResource(
         UriTemplate = "freebox://docs/fr/overview",
         Name = "freebox-docs-fr-overview",
@@ -102,6 +117,21 @@ public sealed class DocumentationResources
     {
         return Get("freebox://docs/fr/tool-families");
     }
+
+    [McpServerResource(UriTemplate = "freebox://docs/fr/domaine-reseau-avance", Name = "freebox-docs-fr-domaine-reseau-avance", Title = "Guide avancé du domaine réseau (français)", MimeType = "text/markdown")]
+    public static TextResourceContents FrenchDomainReseauAvance() => Get("freebox://docs/fr/domaine-reseau-avance");
+
+    [McpServerResource(UriTemplate = "freebox://docs/fr/domaine-fichiers-avances", Name = "freebox-docs-fr-domaine-fichiers-avances", Title = "Guide avancé du domaine fichiers (français)", MimeType = "text/markdown")]
+    public static TextResourceContents FrenchDomainFichiersAvances() => Get("freebox://docs/fr/domaine-fichiers-avances");
+
+    [McpServerResource(UriTemplate = "freebox://docs/fr/domaine-systemhome-controles", Name = "freebox-docs-fr-domaine-systemhome-controles", Title = "Guides des contrôles système et domicile (français)", MimeType = "text/markdown")]
+    public static TextResourceContents FrenchDomainSystemHomeControles() => Get("freebox://docs/fr/domaine-systemhome-controles");
+
+    [McpServerResource(UriTemplate = "freebox://docs/fr/domaine-services-controles", Name = "freebox-docs-fr-domaine-services-controles", Title = "Guide des contrôles de services (français)", MimeType = "text/markdown")]
+    public static TextResourceContents FrenchDomainServicesControles() => Get("freebox://docs/fr/domaine-services-controles");
+
+    [McpServerResource(UriTemplate = "freebox://docs/fr/domaine-parental-ecriture", Name = "freebox-docs-fr-domaine-parental-ecriture", Title = "Guide d'écriture du contrôle parental (français)", MimeType = "text/markdown")]
+    public static TextResourceContents FrenchDomainParentalEcriture() => Get("freebox://docs/fr/domaine-parental-ecriture");
 
     private static TextResourceContents Get(string uri)
     {

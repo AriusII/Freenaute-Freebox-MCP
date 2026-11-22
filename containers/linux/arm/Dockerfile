@@ -4,7 +4,7 @@ ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:11.0.100-resolute-aot
 ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:11.0-resolute-chiseled
 FROM ${SDK_IMAGE} AS build
 
-ARG VERSION=0.1.0-beta
+ARG VERSION=1.0.0
 ARG BUILD_CONFIGURATION=Release
 ENV RID=linux-arm64
 ENV DOTNET_NOLOGO=1 \
@@ -29,7 +29,7 @@ RUN set -eu; \
 
 FROM ${RUNTIME_IMAGE} AS final
 
-ARG VERSION=0.1.0-beta
+ARG VERSION=1.0.0
 
 LABEL org.opencontainers.image.title="Freenaute Freebox MCP" \
       org.opencontainers.image.description="Local stdio MCP server for Freebox discovery, pairing coordination, and system/network status (C#/.NET 11 Native AOT, single file)." \

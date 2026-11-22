@@ -21,7 +21,7 @@ Provide a robust MCP integration for Freebox Server with:
 ## ✨ What this repository provides
 
 - **Local MCP server** (`stdio` transport only) for Freebox Server integration.
-- **31 tools** across discovery, pairing, network, system, downloads, calls, contacts, cameras, notifications, AirMedia, shares, and parental controls.
+- **57 tools** across discovery, pairing, network (basic + advanced), files, system (basic + home controls), downloads, calls, contacts, cameras, notifications, AirMedia, shares, services, and parental controls.
 - **Live + static MCP resources** in **English and French**.
 - **Secure credential handling** (OS vaults and encrypted file mode), no plaintext token fallback.
 - **Cross-platform artifacts** for:
@@ -35,8 +35,8 @@ Provide a robust MCP integration for Freebox Server with:
 .
 ├── mcp/Freenaute.Freebox.Mcp/              # MCP host (Program, startup, security, packaging manifest)
 ├── libs/Freenaute.Freebox.Mcp.Core/        # DI, orchestrator, auth/bootstrap, storage abstraction, redaction
-├── libs/Freenaute.Freebox.Mcp.Tools/       # MCP tools (31) + bounded/sanitized result models
-├── libs/Freenaute.Freebox.Mcp.Resources/   # MCP docs resources (EN/FR) + live status resource
+├── libs/Freenaute.Freebox.Mcp.Tools/       # MCP tools (57) + bounded/sanitized result models
+├── libs/Freenaute.Freebox.Mcp.Resources/   # MCP docs resources (EN/FR domain catalogs) + live resources
 ├── containers/                             # linux/windows Dockerfiles (x64 + arm64)
 ├── tests/                                  # Core / Tools / Resources / Protocol tests
 └── .github/workflows/                      # CI + Release pipelines
@@ -73,7 +73,7 @@ Native AOT publish (example `win-x64`):
 dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
   -c Release -r win-x64 --self-contained true `
   -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true `
-  -o .artifacts/publish/0.1.0-beta/win-x64
+  -o .artifacts/publish/1.0.0/win-x64
 ```
 
 ## 📦 CI/CD overview
@@ -84,6 +84,7 @@ dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
   - Native AOT smoke publish (`linux-x64`)
 - [Release workflow](./.github/workflows/release.yml):
   - release binaries (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`)
+  - NuGet package publish (`Freenaute.Freebox.Mcp`)
   - Linux container publish (amd64 + arm64 + multi-arch manifest)
   - optional Windows container publish (amd64/arm64 on manual dispatch when Docker is available on runner)
   - SBOM and checksums

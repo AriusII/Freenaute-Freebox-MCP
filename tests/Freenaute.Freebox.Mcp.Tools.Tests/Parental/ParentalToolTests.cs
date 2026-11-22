@@ -13,6 +13,7 @@ public sealed class ParentalToolTests
         };
         clientProxy.Filters =
         [
+#pragma warning disable CS0618
             new ParentalFilter
             {
                 Id = 42,
@@ -29,6 +30,7 @@ public sealed class ParentalToolTests
                 CurrentMappingIdx = 3,
                 NextChange = 1700000100
             }
+#pragma warning restore CS0618
         ];
         var tools = new FreeboxParentalTools(client);
 
@@ -62,6 +64,21 @@ public sealed class ParentalToolTests
             await tools.GetFiltersAsync(cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Contains("InvalidRequest", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeleteFilterAsync_WithoutConfirmation_DoesNotCallApi()
+    {
+        IFreeboxClient client = DispatchProxy.Create<IFreeboxClient, FreeboxClientProxy>()!;
+        var tools = new FreeboxParentalTools(client);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await tools.DeleteFilterAsync(
+                42,
+                confirm: false,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Contains("confirm", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [SuppressMessage(

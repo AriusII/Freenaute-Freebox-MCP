@@ -38,7 +38,7 @@ public sealed class StdioProtocolTests
             .. tools.RootElement.GetProperty("result").GetProperty("tools").EnumerateArray()
                 .Select(element => element.GetProperty("name").GetString()!).Order()
         ];
-        Assert.Equal(
+        string[] expectedTools =
         [
             "freebox_airmedia_receivers",
             "freebox_airmedia_status",
@@ -58,20 +58,47 @@ public sealed class StdioProtocolTests
             "freebox_download_stats",
             "freebox_download_status",
             "freebox_downloads_list",
+            "freebox_files_delete",
+            "freebox_files_info",
+            "freebox_files_list",
+            "freebox_files_mkdir",
+            "freebox_files_move",
+            "freebox_files_tasks",
             "freebox_home_status",
             "freebox_lan_overview",
             "freebox_nas_visibility",
+            "freebox_network_dhcp_leases",
+            "freebox_network_ipv6_status",
+            "freebox_network_port_forward_create",
+            "freebox_network_port_forward_delete",
+            "freebox_network_port_forward_update",
+            "freebox_network_port_forwards",
             "freebox_notifications_feed",
             "freebox_pairing_initiate",
             "freebox_pairing_status",
             "freebox_pairing_wait",
             "freebox_parental_config",
+            "freebox_parental_config_update",
+            "freebox_parental_filter_create",
+            "freebox_parental_filter_delete",
+            "freebox_parental_filter_planning_update",
+            "freebox_parental_filter_update",
             "freebox_parental_filters",
+            "freebox_services_afp_update",
+            "freebox_services_ftp_update",
+            "freebox_services_samba_update",
+            "freebox_services_status",
+            "freebox_services_tftp_update",
+            "freebox_services_upnpav_update",
             "freebox_shares_visibility",
             "freebox_status_feed",
+            "freebox_system_standby_configure",
+            "freebox_system_standby_status",
             "freebox_system_status",
+            "freebox_system_updates_status",
             "freebox_wifi_status"
-        ], toolNames);
+        ];
+        Assert.Equal(expectedTools.Order().ToArray(), toolNames);
 
         JsonDocument resources = await SendAsync(process, input,
             "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/list\",\"params\":{}}");
@@ -80,20 +107,36 @@ public sealed class StdioProtocolTests
             .. resources.RootElement.GetProperty("result").GetProperty("resources").EnumerateArray()
                 .Select(element => element.GetProperty("uri").GetString()!).Order()
         ];
-        Assert.Equal(
+        string[] expectedResources =
         [
             "freebox://docs/en/auth-pairing",
+            "freebox://docs/en/domain-files-advanced",
+            "freebox://docs/en/domain-network-advanced",
+            "freebox://docs/en/domain-parental-write",
+            "freebox://docs/en/domain-services-controls",
+            "freebox://docs/en/domain-systemhome-controls",
             "freebox://docs/en/overview",
             "freebox://docs/en/quickstart",
             "freebox://docs/en/resources",
             "freebox://docs/en/tool-families",
             "freebox://docs/fr/authentification-appairage",
+            "freebox://docs/fr/domaine-fichiers-avances",
+            "freebox://docs/fr/domaine-parental-ecriture",
+            "freebox://docs/fr/domaine-reseau-avance",
+            "freebox://docs/fr/domaine-services-controles",
+            "freebox://docs/fr/domaine-systemhome-controles",
             "freebox://docs/fr/overview",
             "freebox://docs/fr/quickstart",
             "freebox://docs/fr/resources",
             "freebox://docs/fr/tool-families",
+            "freebox://live/files-advanced",
+            "freebox://live/network-advanced",
+            "freebox://live/parental-write",
+            "freebox://live/services-controls",
+            "freebox://live/systemhome-controls",
             "freebox://live/status"
-        ], resourceUris);
+        ];
+        Assert.Equal(expectedResources.Order().ToArray(), resourceUris);
 
         JsonDocument read = await SendAsync(process, input,
             "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/read\",\"params\":{\"uri\":\"freebox://docs/en/overview\"}}");

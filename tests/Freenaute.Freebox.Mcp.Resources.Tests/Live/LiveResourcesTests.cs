@@ -41,6 +41,38 @@ public sealed class LiveResourcesTests
         Assert.Equal("text/markdown", metadata.MimeType);
     }
 
+    [Theory]
+    [InlineData(nameof(LiveResources.GetNetworkAdvancedAsync), "freebox://live/network-advanced", "freebox-live-network-advanced")]
+    [InlineData(nameof(LiveResources.GetFilesAdvancedAsync), "freebox://live/files-advanced", "freebox-live-files-advanced")]
+    [InlineData(nameof(LiveResources.GetSystemHomeControlsAsync), "freebox://live/systemhome-controls", "freebox-live-systemhome-controls")]
+    [InlineData(nameof(LiveResources.GetServicesControlsAsync), "freebox://live/services-controls", "freebox-live-services-controls")]
+    [InlineData(nameof(LiveResources.GetParentalWriteAsync), "freebox://live/parental-write", "freebox-live-parental-write")]
+    public void DomainLiveResource_HasExpectedMetadata(string methodName, string uri, string name)
+    {
+        MethodInfo method = typeof(LiveResources).GetMethod(methodName)!;
+        McpServerResourceAttribute metadata = Assert.Single(method.GetCustomAttributes<McpServerResourceAttribute>());
+        Assert.Equal(uri, metadata.UriTemplate);
+        Assert.Equal(name, metadata.Name);
+        Assert.Equal("text/markdown", metadata.MimeType);
+    }
+
+    [Theory]
+    [InlineData(nameof(LiveResources.GetNetworkAdvancedAsync), "freebox://live/network-advanced")]
+    [InlineData(nameof(LiveResources.GetFilesAdvancedAsync), "freebox://live/files-advanced")]
+    [InlineData(nameof(LiveResources.GetSystemHomeControlsAsync), "freebox://live/systemhome-controls")]
+    [InlineData(nameof(LiveResources.GetServicesControlsAsync), "freebox://live/services-controls")]
+    [InlineData(nameof(LiveResources.GetParentalWriteAsync), "freebox://live/parental-write")]
+    public async Task DomainLiveResource_WithoutSource_ReturnsSafeFallback(string methodName, string uri)
+    {
+        var resource = new LiveResources();
+        MethodInfo method = typeof(LiveResources).GetMethod(methodName)!;
+        TextResourceContents result = await Assert.IsType<ValueTask<TextResourceContents>>(
+            method.Invoke(resource, [TestContext.Current.CancellationToken]));
+        Assert.Equal(uri, result.Uri);
+        Assert.Equal("text/markdown", result.MimeType);
+        Assert.Contains("Live data is unavailable", result.Text, StringComparison.Ordinal);
+    }
+
     private sealed class StubSource(string content, string? mediaType) : IFreeboxLiveResourceSource
     {
         public ValueTask<FreeboxLiveSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)

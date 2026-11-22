@@ -2,13 +2,13 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "description": "Local stdio MCP server for Freebox Server.",
   "name": "org.freenaute/freenaute-freebox-mcp",
-  "version": "0.1.0-beta",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "nuget",
       "registryBaseUrl": "https://api.nuget.org",
       "identifier": "Freenaute.Freebox.Mcp",
-      "version": "0.1.0-beta",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       }
