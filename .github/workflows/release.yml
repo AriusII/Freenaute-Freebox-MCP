@@ -237,18 +237,18 @@ jobs:
         id: docker_check
         shell: pwsh
         run: |
+          $available = 'false'
+          $PSNativeCommandUseErrorActionPreference = $false
           $docker = Get-Command docker -ErrorAction SilentlyContinue
-          if (-not $docker) {
-            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            exit 0
+
+          if ($docker) {
+            & docker version 1>$null 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $available = 'true'
+            }
           }
 
-          docker version *> $null
-          if ($LASTEXITCODE -eq 0) {
-            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+          "available=$available" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Login to GHCR
         if: steps.docker_check.outputs.available == 'true'
@@ -289,18 +289,18 @@ jobs:
         id: docker_check
         shell: pwsh
         run: |
+          $available = 'false'
+          $PSNativeCommandUseErrorActionPreference = $false
           $docker = Get-Command docker -ErrorAction SilentlyContinue
-          if (-not $docker) {
-            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            exit 0
+
+          if ($docker) {
+            & docker version 1>$null 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $available = 'true'
+            }
           }
 
-          docker version *> $null
-          if ($LASTEXITCODE -eq 0) {
-            "available=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            "available=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+          "available=$available" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Login to GHCR
         if: steps.docker_check.outputs.available == 'true'
