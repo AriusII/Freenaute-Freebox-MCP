@@ -126,6 +126,7 @@ public sealed class StdioProtocolTests
         start.ArgumentList.Add(assembly);
         start.Environment["DOTNET_ENVIRONMENT"] = "Production";
         start.Environment["FREEBOX_APPLICATION_ID"] = "org.freenaute.freebox-mcp.tests";
+        start.Environment["FREEBOX_AUTHENTICATE_ON_STARTUP"] = "false";
         return Process.Start(start) ?? throw new InvalidOperationException("The MCP server did not start.");
     }
 
