@@ -301,7 +301,7 @@ jobs:
           fi
 
       - name: Pack NuGet MCP tool
-        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} --no-restore -p:Version=${{ needs.resolve.outputs.version }} -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget/${{ needs.resolve.outputs.version }}
+        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -p:Version=${{ needs.resolve.outputs.version }} -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget/${{ needs.resolve.outputs.version }}
 
       - name: Push package to NuGet.org
         shell: bash

@@ -54,7 +54,7 @@ jobs:
         run: dotnet msbuild -t:ValidateMetadata,ValidateContainers -p:Configuration=${{ env.CONFIGURATION }}
 
       - name: Pack NuGet MCP tool (smoke)
-        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} --no-build -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget-ci
+        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} --no-restore -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget-ci
 
   smoke-aot-linux-x64:
     name: Native AOT smoke publish (linux-x64)
