@@ -343,11 +343,14 @@ jobs:
           dotnet-version: ${{ needs.resolve.outputs.sdk }}
 
       - name: Ensure NuGet user is configured
-        if: ${{ secrets.NUGET_USER == '' }}
         shell: bash
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
         run: |
-          echo "NUGET_USER secret is required for NuGet trusted publishing."
-          exit 1
+          if [ -z "${NUGET_USER}" ]; then
+            echo "NUGET_USER secret is required for NuGet trusted publishing."
+            exit 1
+          fi
 
       - name: Pack NuGet MCP tool
         run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -p:Version=${{ needs.resolve.outputs.version }} -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget/${{ needs.resolve.outputs.version }}
