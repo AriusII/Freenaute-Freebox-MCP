@@ -329,8 +329,10 @@ jobs:
       - resolve
       - validate
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -340,20 +342,27 @@ jobs:
         with:
           dotnet-version: ${{ needs.resolve.outputs.sdk }}
 
-      - name: Ensure NuGet API key is configured
-        if: ${{ secrets.NUGET_API_KEY == '' }}
+      - name: Ensure NuGet user is configured
+        if: ${{ secrets.NUGET_USER == '' }}
         shell: bash
-        run: echo "NUGET_API_KEY is not configured, skipping NuGet.org push for this run."
+        run: |
+          echo "NUGET_USER secret is required for NuGet trusted publishing."
+          exit 1
 
       - name: Pack NuGet MCP tool
         run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -p:Version=${{ needs.resolve.outputs.version }} -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget/${{ needs.resolve.outputs.version }}
 
+      - name: NuGet login (OIDC)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push package to NuGet.org
-        if: ${{ secrets.NUGET_API_KEY != '' }}
         shell: bash
         run: |
           dotnet nuget push ".artifacts/nuget/${{ needs.resolve.outputs.version }}/*.nupkg" \
-            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --source "${{ env.NUGET_SOURCE }}" \
             --skip-duplicate
 
