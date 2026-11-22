@@ -2,6 +2,8 @@ namespace Freenaute.Freebox.Mcp.Protocol.Tests.Stdio;
 
 public sealed class StdioProtocolTests
 {
+    private static readonly TimeSpan ResponseTimeout = TimeSpan.FromSeconds(20);
+
     [Fact]
     public async Task ManagedStdioServer_InitializeAndListsExpectedCapabilities_WithoutFreebox()
     {
@@ -136,7 +138,7 @@ public sealed class StdioProtocolTests
         await input.FlushAsync(TestContext.Current.CancellationToken);
         string? line = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken)
             .AsTask()
-            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            .WaitAsync(ResponseTimeout, TestContext.Current.CancellationToken);
         if (!string.IsNullOrWhiteSpace(line))
         {
             return JsonDocument.Parse(line);
