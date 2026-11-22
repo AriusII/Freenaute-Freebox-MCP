@@ -428,3 +428,7 @@ FodyWeavers.xsd
 .idea/
 
 # .artifacts/ (see ".NET Core" section above) already covers publish/, package/, release/ and protocol-host/ outputs.
+
+# Keep container architecture folders tracked even with generic ARM ignore rules above.
+!containers/**/arm/
+!containers/**/arm/**
