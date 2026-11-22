@@ -9,7 +9,9 @@ FROM ${TOOLCHAIN_IMAGE} AS build
 
 ARG VERSION=0.1.0-beta
 ARG BUILD_CONFIGURATION=Release
-ENV RID=win-x64
+ENV RID=win-x64 `
+    VERSION=$VERSION `
+    BUILD_CONFIGURATION=$BUILD_CONFIGURATION
 
 SHELL ["powershell.exe", "-NoProfile", "-Command", "$ErrorActionPreference = 'Stop';"]
 

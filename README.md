@@ -27,7 +27,7 @@ Provide a robust MCP integration for Freebox Server with:
 - **Cross-platform artifacts** for:
   - Windows `x64`, `arm64`
   - Linux `x64`, `arm64`
-- **Four dedicated Dockerfiles** and a CI/CD pipeline for binary releases + NuGet + GHCR images.
+- **Four dedicated Dockerfiles** and a CI/CD pipeline for binary releases + GHCR images.
 
 ## 🧭 Architecture
 
@@ -84,8 +84,8 @@ dotnet publish mcp/Freenaute.Freebox.Mcp/Freenaute.Freebox.Mcp.csproj `
   - Native AOT smoke publish (`linux-x64`)
 - [Release workflow](./.github/workflows/release.yml):
   - release binaries (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`)
-  - NuGet package publish
-  - container image publish (Linux + Windows, x64 + arm64)
+  - Linux container publish (amd64 + arm64 + multi-arch manifest)
+  - optional Windows container publish (amd64/arm64 on manual dispatch when Docker is available on runner)
   - SBOM and checksums
   - GitHub release assets
 

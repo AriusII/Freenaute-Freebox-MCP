@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:11.0.100-resolute-aot
+ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:11.0-resolute-chiseled
 FROM ${SDK_IMAGE} AS build
 
 ARG VERSION=0.1.0-beta
@@ -26,7 +27,6 @@ RUN set -eu; \
       -p:Version="${VERSION}" \
       -o /app/publish
 
-ARG RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime-deps:11.0-resolute-chiseled
 FROM ${RUNTIME_IMAGE} AS final
 
 ARG VERSION=0.1.0-beta

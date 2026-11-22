@@ -52,7 +52,7 @@ docker run --rm -i freenaute-freebox-mcp:linux-amd64
 - Linux multi-arch manifests:
   - `ghcr.io/<owner>/<repo>:<version>`
   - `ghcr.io/<owner>/<repo>:latest`
-- Windows image tags:
+- Windows image tags (manual `workflow_dispatch` only, opt-in inputs):
   - `ghcr.io/<owner>/<repo>:<version>-windows-amd64`
   - `ghcr.io/<owner>/<repo>:<version>-windows-arm64`
   - compatibility aliases `:windows-amd64`, `:windows-arm64`

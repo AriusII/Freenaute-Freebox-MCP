@@ -10,6 +10,11 @@ on:
         description: "Release version override (for manual runs only)"
         required: false
         type: string
+      publish_windows_x64_container:
+        description: "Publish windows/amd64 container (requires Windows runner with Docker daemon available)"
+        required: false
+        default: false
+        type: boolean
       publish_windows_arm_container:
         description: "Publish windows/arm64 container (requires ARM runner with Docker available)"
         required: false
@@ -219,6 +224,7 @@ jobs:
       - resolve
       - validate
     runs-on: windows-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_windows_x64_container }}
     permissions:
       contents: read
       packages: write
@@ -275,7 +281,6 @@ jobs:
       - validate
       - publish-binaries
       - containers-linux
-      - containers-windows-x64
     runs-on: ubuntu-latest
     permissions:
       contents: write
