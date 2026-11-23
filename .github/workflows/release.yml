@@ -1,22 +1,19 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version override (for manual runs only)"
-        required: false
+        description: Release version override
+        required: true
         type: string
       publish_windows_x64_container:
-        description: "Publish windows/amd64 container (requires Windows runner with Docker daemon available)"
+        description: Publish Windows amd64 container
         required: false
         default: false
         type: boolean
       publish_windows_arm_container:
-        description: "Publish windows/arm64 container (requires ARM runner with Docker available)"
+        description: Publish Windows arm64 container
         required: false
         default: false
         type: boolean
@@ -25,8 +22,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   SOLUTION: Freenaute.Freebox.MCP.slnx
@@ -41,49 +38,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.value }}
-      sdk: ${{ steps.sdk.outputs.value }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Resolve .NET SDK from global.json
-        id: sdk
-        shell: pwsh
-        run: |
-          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
-          "value=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
       - name: Resolve release version
         id: version
         shell: pwsh
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
         run: |
-          if ('${{ github.event.inputs.version }}') {
-            $v = '${{ github.event.inputs.version }}'
-          } elseif ($env:GITHUB_REF_NAME -like 'v*') {
-            $v = $env:GITHUB_REF_NAME.Substring(1)
-          } else {
-            $proj = [xml](Get-Content $env:MCP_PROJECT)
-            $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          if ([string]::IsNullOrWhiteSpace($env:MANUAL_VERSION)) {
+            throw 'The release version input is required.'
           }
-
-          if ([string]::IsNullOrWhiteSpace($v)) {
-            throw 'Unable to resolve release version.'
+          $v = $env:MANUAL_VERSION.Trim()
+          if ($v -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$') {
+            throw "Invalid semantic release version: '$v'"
           }
-
           "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
   validate:
-    name: Validate (restore, build, test, metadata)
+    name: Build, test, validate
     needs: resolve
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ needs.resolve.outputs.sdk }}
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
 
       - name: Restore
         run: dotnet restore ${{ env.SOLUTION }}
@@ -102,6 +85,7 @@ jobs:
     needs:
       - resolve
       - validate
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -118,28 +102,31 @@ jobs:
           - rid: linux-arm64
             os: ubuntu-24.04-arm
             archive_ext: tar.gz
-    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ needs.resolve.outputs.sdk }}
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
 
-      - name: Install Native AOT toolchain (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
+      - name: Install Native AOT toolchain
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
-      - name: Restore (RID-specific)
-        run: dotnet restore ${{ env.MCP_PROJECT }} -r ${{ matrix.rid }}
+      - name: Publish Native AOT binary
+        shell: bash
+        run: |
+          dotnet publish "${{ env.MCP_PROJECT }}" \
+            -c "${{ env.CONFIGURATION }}" \
+            -r "${{ matrix.rid }}" \
+            --self-contained true \
+            -p:PublishAot=true \
+            -p:PublishSingleFile=true \
+            -p:InvariantGlobalization=true \
+            -p:Version=${{ needs.resolve.outputs.version }} \
+            -o ".artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}"
 
-      - name: Publish (Native AOT, single file)
-        shell: pwsh
-        run: dotnet publish ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -r ${{ matrix.rid }} --self-contained true --no-restore -p:PublishAot=true -p:PublishSingleFile=true -p:InvariantGlobalization=true -p:Version=${{ needs.resolve.outputs.version }} -o .artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}
-
-      - name: Archive (tar.gz)
+      - name: Archive tar.gz
         if: matrix.archive_ext == 'tar.gz'
         shell: bash
         run: |
@@ -147,13 +134,15 @@ jobs:
           tar -czf ".artifacts/release/freenaute-freebox-mcp-${{ needs.resolve.outputs.version }}-${{ matrix.rid }}.tar.gz" \
             -C ".artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}" .
 
-      - name: Archive (zip)
+      - name: Archive zip
         if: matrix.archive_ext == 'zip'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path .artifacts/release | Out-Null
-          Compress-Archive -Path ".artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}/*" `
-            -DestinationPath ".artifacts/release/freenaute-freebox-mcp-${{ needs.resolve.outputs.version }}-${{ matrix.rid }}.zip" -Force
+          Compress-Archive `
+            -Path ".artifacts/publish/${{ needs.resolve.outputs.version }}/${{ matrix.rid }}/*" `
+            -DestinationPath ".artifacts/release/freenaute-freebox-mcp-${{ needs.resolve.outputs.version }}-${{ matrix.rid }}.zip" `
+            -Force
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v6
@@ -163,7 +152,7 @@ jobs:
           retention-days: 30
 
   containers-linux:
-    name: Publish Linux containers (amd64 + arm64 + manifest)
+    name: Publish Linux ${{ matrix.platform }}
     needs:
       - resolve
       - validate
@@ -171,6 +160,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            docker_platform: linux/amd64
+            dockerfile: containers/linux/x64/Dockerfile
+            tag: linux-amd64
+          - platform: arm64
+            docker_platform: linux/arm64
+            dockerfile: containers/linux/arm/Dockerfile
+            tag: linux-arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -188,210 +189,119 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push linux/amd64
+      - name: Build and push
         shell: bash
         run: |
           docker buildx build \
-            --platform linux/amd64 \
-            -f containers/linux/x64/Dockerfile \
+            --platform "${{ matrix.docker_platform }}" \
+            -f "${{ matrix.dockerfile }}" \
             --build-arg VERSION=${{ needs.resolve.outputs.version }} \
-            -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-amd64 \
-            -t ${{ env.GHCR_IMAGE }}:linux-amd64 \
+            -t "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-${{ matrix.tag }}" \
+            -t "${{ env.GHCR_IMAGE }}:${{ matrix.tag }}" \
             --push .
 
-      - name: Build and push linux/arm64
-        shell: bash
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            -f containers/linux/arm/Dockerfile \
-            --build-arg VERSION=${{ needs.resolve.outputs.version }} \
-            -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-arm64 \
-            -t ${{ env.GHCR_IMAGE }}:linux-arm64 \
-            --push .
+  containers-linux-manifest:
+    name: Publish Linux multi-architecture manifest
+    needs:
+      - resolve
+      - containers-linux
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push Linux multi-arch manifests
-        shell: bash
+      - name: Create and push manifest
         run: |
           docker buildx imagetools create \
-            -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }} \
-            -t ${{ env.GHCR_IMAGE }}:latest \
-            ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-amd64 \
-            ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-arm64
+            -t "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}" \
+            -t "${{ env.GHCR_IMAGE }}:latest" \
+            "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-amd64" \
+            "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-linux-arm64"
 
-  containers-windows-x64:
-    name: Publish Windows container (amd64)
+  containers-windows:
+    name: Publish Windows ${{ matrix.platform }}
     needs:
       - resolve
       - validate
-    runs-on: windows-latest
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_windows_x64_container }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            os: windows-latest
+            dockerfile: containers/windows/x64/Dockerfile
+            tag: windows-amd64
+            enabled: ${{ inputs.publish_windows_x64_container }}
+          - platform: arm64
+            os: windows-11-arm
+            dockerfile: containers/windows/arm/Dockerfile
+            tag: windows-arm64
+            enabled: ${{ inputs.publish_windows_arm_container }}
     steps:
       - name: Checkout
+        if: matrix.enabled
         uses: actions/checkout@v6
 
-      - name: Check Docker availability
-        id: docker_check
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $available = 'false'
-          $PSNativeCommandUseErrorActionPreference = $false
-          $docker = Get-Command docker -ErrorAction SilentlyContinue
-
-          if ($docker) {
-            try {
-              & $docker.Source version 1>$null 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                $available = 'true'
-              }
-            } catch {
-              $available = 'false'
-            }
-          }
-
-          "available=$available" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
       - name: Login to GHCR
-        if: steps.docker_check.outputs.available == 'true'
+        if: matrix.enabled
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push windows/amd64
-        if: steps.docker_check.outputs.available == 'true'
+      - name: Build and push
+        if: matrix.enabled
         shell: pwsh
         run: |
-          docker build -f containers/windows/x64/Dockerfile --build-arg VERSION=${{ needs.resolve.outputs.version }} -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-amd64 -t ${{ env.GHCR_IMAGE }}:windows-amd64 .
-          docker push ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-amd64
-          docker push ${{ env.GHCR_IMAGE }}:windows-amd64
-
-      - name: Skip windows/amd64 publish (docker unavailable)
-        if: steps.docker_check.outputs.available != 'true'
-        shell: pwsh
-        run: Write-Host "Docker daemon is unavailable on this runner; skipping windows/amd64 container publish."
-
-  containers-windows-arm64:
-    name: Publish Windows container (arm64)
-    needs:
-      - resolve
-      - validate
-    runs-on: windows-11-arm
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_windows_arm_container }}
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Check Docker availability
-        id: docker_check
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $available = 'false'
-          $PSNativeCommandUseErrorActionPreference = $false
-          $docker = Get-Command docker -ErrorAction SilentlyContinue
-
-          if ($docker) {
-            try {
-              & $docker.Source version 1>$null 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                $available = 'true'
-              }
-            } catch {
-              $available = 'false'
-            }
-          }
-
-          "available=$available" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Login to GHCR
-        if: steps.docker_check.outputs.available == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push windows/arm64
-        if: steps.docker_check.outputs.available == 'true'
-        shell: pwsh
-        run: |
-          docker build -f containers/windows/arm/Dockerfile --build-arg VERSION=${{ needs.resolve.outputs.version }} -t ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-arm64 -t ${{ env.GHCR_IMAGE }}:windows-arm64 .
-          docker push ${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-windows-arm64
-          docker push ${{ env.GHCR_IMAGE }}:windows-arm64
-
-      - name: Skip windows/arm64 publish (docker unavailable)
-        if: steps.docker_check.outputs.available != 'true'
-        shell: pwsh
-        run: Write-Host "Docker daemon is unavailable on this runner; skipping windows/arm64 container publish."
+          docker build `
+            -f "${{ matrix.dockerfile }}" `
+            --build-arg VERSION=${{ needs.resolve.outputs.version }} `
+            -t "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-${{ matrix.tag }}" `
+            -t "${{ env.GHCR_IMAGE }}:${{ matrix.tag }}" `
+            .
+          docker push "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-${{ matrix.tag }}"
+          docker push "${{ env.GHCR_IMAGE }}:${{ matrix.tag }}"
 
   publish-nuget:
-    name: Publish NuGet package
+    name: Publish NuGet (${{ matrix.rid }})
     needs:
       - resolve
       - validate
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ needs.resolve.outputs.sdk }}
-
-      - name: Ensure NuGet user is configured
-        shell: bash
-        env:
-          NUGET_USER: ${{ secrets.NUGET_USER }}
-        run: |
-          if [ -z "${NUGET_USER}" ]; then
-            echo "NUGET_USER secret is required for NuGet trusted publishing."
-            exit 1
-          fi
-
-      - name: Pack NuGet MCP tool
-        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} -p:Version=${{ needs.resolve.outputs.version }} -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget/${{ needs.resolve.outputs.version }}
-
-      - name: Validate package selection
-        shell: bash
-        run: |
-          ls -la ".artifacts/nuget/${{ needs.resolve.outputs.version }}"
-          test -f ".artifacts/nuget/${{ needs.resolve.outputs.version }}/Freenaute.Freebox.Mcp.${{ needs.resolve.outputs.version }}.nupkg"
-
-      - name: NuGet login (OIDC)
-        id: login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      - name: Push package to NuGet.org
-        shell: bash
-        run: |
-          dotnet nuget push ".artifacts/nuget/${{ needs.resolve.outputs.version }}/Freenaute.Freebox.Mcp.${{ needs.resolve.outputs.version }}.nupkg" \
-            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
-            --source "${{ env.NUGET_SOURCE }}" \
-            --skip-duplicate
+    strategy:
+      fail-fast: false
+      matrix:
+        rid:
+          - base
+          - win-x64
+          - win-arm64
+          - linux-x64
+          - linux-arm64
+    uses: ./.github/workflows/_publish-nuget.yml
+    with:
+      rid: ${{ matrix.rid }}
+      version: ${{ needs.resolve.outputs.version }}
+    secrets:
+      NUGET_USER: ${{ secrets.NUGET_USER }}
 
   release:
     name: Assemble and publish GitHub release
     needs:
       - resolve
-      - validate
       - publish-binaries
-      - containers-linux
+      - containers-linux-manifest
       - publish-nuget
     runs-on: ubuntu-latest
     permissions:
@@ -407,7 +317,7 @@ jobs:
           path: dist/binaries
           merge-multiple: true
 
-      - name: Generate SBOM (SPDX JSON)
+      - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
           path: dist
@@ -423,16 +333,15 @@ jobs:
           find . -type f ! -name 'SHA256SUMS.txt' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS.txt
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          tag_name: v${{ needs.resolve.outputs.version }}
+          name: Release v${{ needs.resolve.outputs.version }}
           files: |
             dist/binaries/*
             dist/sbom.spdx.json
             dist/SHA256SUMS.txt
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.resolve.outputs.version, '-') }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

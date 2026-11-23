@@ -1,0 +1,22 @@
+name: Setup solution .NET SDK
+description: Read global.json and install the pinned .NET SDK
+
+outputs:
+  sdk:
+    description: Pinned .NET SDK version
+    value: ${{ steps.sdk.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Read SDK version
+      id: sdk
+      shell: pwsh
+      run: |
+        $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
+        "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ steps.sdk.outputs.version }}

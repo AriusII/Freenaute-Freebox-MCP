@@ -22,24 +22,15 @@ env:
   CONFIGURATION: Release
 
 jobs:
-  validate:
-    name: Build, test, validate
+  build-test:
+    name: Restore, build, test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read SDK version from global.json
-        id: sdk
-        shell: pwsh
-        run: |
-          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
-          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ steps.sdk.outputs.version }}
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
 
       - name: Restore
         run: dotnet restore ${{ env.SOLUTION }}
@@ -50,26 +41,69 @@ jobs:
       - name: Test
         run: dotnet test ${{ env.SOLUTION }} -c ${{ env.CONFIGURATION }} --no-build
 
-      - name: Validate metadata and container policies
-        run: dotnet msbuild -t:ValidateMetadata,ValidateContainers -p:Configuration=${{ env.CONFIGURATION }}
-
-      - name: Pack NuGet MCP tool (smoke)
-        run: dotnet pack ${{ env.MCP_PROJECT }} -c ${{ env.CONFIGURATION }} --no-restore -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget-ci
-
-  smoke-aot-linux-x64:
-    name: Native AOT smoke publish (linux-x64)
-    needs: validate
+  validate:
+    name: Validate metadata
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read SDK version from global.json
-        id: sdk
-        shell: pwsh
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Validate metadata and container policies
+        run: dotnet msbuild -t:ValidateMetadata,ValidateContainers -p:Configuration=${{ env.CONFIGURATION }}
+
+  nuget-smoke:
+    name: Pack NuGet ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid:
+          - base
+          - win-x64
+          - win-arm64
+          - linux-x64
+          - linux-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Pack NuGet tool
+        shell: bash
         run: |
-          $sdkVersion = (Get-Content global.json | ConvertFrom-Json).sdk.version
-          "version=$sdkVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          args=(-c "${{ env.CONFIGURATION }}" -p:PublishAot=false -p:SelfContained=false -o .artifacts/nuget-ci)
+          if [ "${{ matrix.rid }}" = "base" ]; then
+            dotnet pack "${{ env.MCP_PROJECT }}" "${args[@]}"
+          else
+            dotnet pack "${{ env.MCP_PROJECT }}" "${args[@]}" -r "${{ matrix.rid }}"
+          fi
+
+  smoke-aot:
+    name: Native AOT smoke ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: win-arm64
+            os: windows-11-arm
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
 
       - name: Read package version from MCP project
         id: version
@@ -79,29 +113,29 @@ jobs:
           $v = ($proj.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
           "value=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: ${{ steps.sdk.outputs.version }}
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
 
       - name: Install Native AOT toolchain
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Publish Native AOT binary
+        shell: bash
         run: |
           dotnet publish ${{ env.MCP_PROJECT }} \
             -c ${{ env.CONFIGURATION }} \
-            -r linux-x64 \
+            -r ${{ matrix.rid }} \
             --self-contained true \
             -p:PublishAot=true \
             -p:PublishSingleFile=true \
             -p:InvariantGlobalization=true \
             -p:Version=${{ steps.version.outputs.value }} \
-            -o .artifacts/publish/${{ steps.version.outputs.value }}/linux-x64
+            -o .artifacts/publish/${{ steps.version.outputs.value }}/${{ matrix.rid }}
 
       - name: Upload smoke artifact
         uses: actions/upload-artifact@v6
         with:
-          name: ci-smoke-linux-x64
-          path: .artifacts/publish/${{ steps.version.outputs.value }}/linux-x64/
+          name: ci-smoke-${{ matrix.rid }}
+          path: .artifacts/publish/${{ steps.version.outputs.value }}/${{ matrix.rid }}/
           retention-days: 7
