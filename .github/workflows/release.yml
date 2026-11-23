@@ -7,16 +7,6 @@ on:
         description: Release version override
         required: true
         type: string
-      publish_windows_x64_container:
-        description: Publish Windows amd64 container
-        required: false
-        default: false
-        type: boolean
-      publish_windows_arm_container:
-        description: Publish Windows arm64 container
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -231,7 +221,6 @@ jobs:
     needs:
       - resolve
       - validate
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -244,19 +233,38 @@ jobs:
             os: windows-latest
             dockerfile: containers/windows/x64/Dockerfile
             tag: windows-amd64
-            enabled: ${{ inputs.publish_windows_x64_container }}
           - platform: arm64
             os: windows-11-arm
             dockerfile: containers/windows/arm/Dockerfile
             tag: windows-arm64
-            enabled: ${{ inputs.publish_windows_arm_container }}
     steps:
       - name: Checkout
-        if: matrix.enabled
         uses: actions/checkout@v6
 
+      - name: Check Docker availability
+        id: docker_check
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $available = 'false'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $docker = Get-Command docker -ErrorAction SilentlyContinue
+
+          if ($docker) {
+            try {
+              & $docker.Source version 1>$null 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                $available = 'true'
+              }
+            } catch {
+              $available = 'false'
+            }
+          }
+
+          "available=$available" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Login to GHCR
-        if: matrix.enabled
+        if: steps.docker_check.outputs.available == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -264,7 +272,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        if: matrix.enabled
+        if: steps.docker_check.outputs.available == 'true'
         shell: pwsh
         run: |
           docker build `
@@ -276,11 +284,18 @@ jobs:
           docker push "${{ env.GHCR_IMAGE }}:${{ needs.resolve.outputs.version }}-${{ matrix.tag }}"
           docker push "${{ env.GHCR_IMAGE }}:${{ matrix.tag }}"
 
+      - name: Skip container publish (docker unavailable)
+        if: steps.docker_check.outputs.available != 'true'
+        shell: pwsh
+        run: Write-Host "Docker daemon is unavailable on this runner; skipping ${{ matrix.platform }} container publish."
+
   publish-nuget:
     name: Publish NuGet (${{ matrix.rid }})
     needs:
       - resolve
       - validate
+    runs-on: ubuntu-latest
+    environment: release
     strategy:
       fail-fast: false
       matrix:
@@ -290,12 +305,57 @@ jobs:
           - win-arm64
           - linux-x64
           - linux-arm64
-    uses: ./.github/workflows/_publish-nuget.yml
-    with:
-      rid: ${{ matrix.rid }}
-      version: ${{ needs.resolve.outputs.version }}
-    secrets:
-      NUGET_USER: ${{ secrets.NUGET_USER }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup solution .NET SDK
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Ensure NuGet user is configured
+        shell: bash
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
+        run: test -n "$NUGET_USER"
+
+      - name: Pack package
+        shell: bash
+        run: |
+          output=".artifacts/nuget/${{ needs.resolve.outputs.version }}"
+          if [ "${{ matrix.rid }}" = "base" ]; then
+            dotnet pack "${{ env.MCP_PROJECT }}" \
+              -c "${{ env.CONFIGURATION }}" \
+              -p:Version=${{ needs.resolve.outputs.version }} \
+              -p:PublishAot=false \
+              -p:SelfContained=false \
+              -o "$output"
+            package="$output/Freenaute.Freebox.Mcp.${{ needs.resolve.outputs.version }}.nupkg"
+          else
+            dotnet pack "${{ env.MCP_PROJECT }}" \
+              -c "${{ env.CONFIGURATION }}" \
+              -r "${{ matrix.rid }}" \
+              -p:Version=${{ needs.resolve.outputs.version }} \
+              -p:PublishAot=false \
+              -p:SelfContained=false \
+              -o "$output"
+            package="$output/Freenaute.Freebox.Mcp.${{ matrix.rid }}.${{ needs.resolve.outputs.version }}.nupkg"
+          fi
+          test -f "$package"
+          echo "PACKAGE=$package" >> "$GITHUB_ENV"
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push package
+        shell: bash
+        run: |
+          dotnet nuget push "$PACKAGE" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source "${{ env.NUGET_SOURCE }}" \
+            --skip-duplicate
 
   release:
     name: Assemble and publish GitHub release
